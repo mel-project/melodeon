@@ -15,3 +15,5 @@ pub enum Type<TVar: Clone = ()> {
     Vectorof(Arc<Type>, u16),
     Struct(IStr, Map<IStr, Type>),
 }
+
+/// 
