@@ -1,7 +1,7 @@
 use internment::Intern;
-use smallvec::SmallVec;
 
-/// List type
+/// List type.
+///
 /// TODO: replace with some good immutable vector
 pub type List<T> = Vec<T>;
 

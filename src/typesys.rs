@@ -10,6 +10,8 @@ pub trait Variable: Clone + Hash + Eq + Debug {}
 impl Variable for Void {}
 
 /// A Melodeon type. Generic over a "placeholder" type that represents type variables.
+///
+/// In general, typechecking code should not directly match against Type. Instead, use the subtyping and unification methods as needed.
 #[derive(Clone)]
 pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     None,
@@ -38,19 +40,19 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
 }
 
 impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
-    /// Subtype relation
-    pub fn subtype(&self, other: &Self) -> bool {
+    /// Subtype relation. Returns true iff `self` is a subtype of `other`.
+    pub fn subtype_of(&self, other: &Self) -> bool {
         log::debug!("checking {:?} <:? {:?}", self, other);
         match (self, other) {
             (Type::None, _) => true,
             (_, Type::None) => false,
             (_, Type::Any) => true,
             (Type::Any, _) => false,
-            (Type::Union(t, u), anything) => t.subtype(anything) && u.subtype(anything),
+            (Type::Union(t, u), anything) => t.subtype_of(anything) && u.subtype_of(anything),
             (Type::Var(x), Type::Var(y)) => x == y,
             (Type::Var(_), Type::Union(t, u)) => {
                 // conservatively
-                self.subtype(t) || self.subtype(u)
+                self.subtype_of(t) || self.subtype_of(u)
             }
             (Type::Var(_), _) => false,
             (_, Type::Var(_)) => false,
@@ -59,43 +61,46 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 // we only apply the union rule if either both sides of the range are the same number, or they cannot  be evaluated down to numbers. otherwise, we break down the LHS too.
                 if let Some((a, b)) = a.try_eval().and_then(|a| Some((a, b.try_eval()?))) {
                     if a == b {
-                        self.subtype(t) || self.subtype(u)
+                        self.subtype_of(t) || self.subtype_of(u)
                     } else {
-                        self.subtype(t) || self.subtype(u) || {
+                        self.subtype_of(t) || self.subtype_of(u) || {
                             // break down
                             let midpoint = a + (b - a) / 2;
                             let left_half = Type::NatRange(a.into(), midpoint.into());
                             let right_half = Type::NatRange((midpoint + 1).min(b).into(), b.into());
-                            left_half.subtype(other) && right_half.subtype(other)
+                            left_half.subtype_of(other) && right_half.subtype_of(other)
                         }
                     }
                 } else {
-                    self.subtype(t) || self.subtype(u)
+                    self.subtype_of(t) || self.subtype_of(u)
                 }
             }
             (Type::NatRange(_, _), _) => false,
             (Type::Vector(_), Type::NatRange(_, _)) => false,
             (Type::Vector(v1), Type::Vector(v2)) => {
                 // pairwise comparison
-                v1.len() == v2.len() && v1.iter().zip(v2.iter()).all(|(v1, v2)| v1.subtype(v2))
+                v1.len() == v2.len() && v1.iter().zip(v2.iter()).all(|(v1, v2)| v1.subtype_of(v2))
             }
             (Type::Vector(v1), Type::Vectorof(v2_all, v2_len)) => v2_len
                 .try_eval()
                 .map(|v2_len| {
-                    v2_len == U256::from(v1.len() as u64) && v1.iter().all(|i| i.subtype(v2_all))
+                    v2_len == U256::from(v1.len() as u64) && v1.iter().all(|i| i.subtype_of(v2_all))
                 })
                 .unwrap_or(false),
             (Type::Vector(_), Type::Struct(_, _)) => false,
             (Type::Vector(v1), Type::Union(t, u)) => {
                 // We "look into" the RHS vector. This is more precise than the union rule.
                 // We still apply the union rule first because that's faster, doesn't allocate, etc.
-                self.subtype(t)
-                    || self.subtype(u)
+                self.subtype_of(t)
+                    || self.subtype_of(u)
                     || other
                         .to_vector()
                         .map(|other| {
                             v1.len() == other.len()
-                                && v1.iter().zip(other.iter()).all(|(v1, v2)| v1.subtype(v2))
+                                && v1
+                                    .iter()
+                                    .zip(other.iter())
+                                    .all(|(v1, v2)| v1.subtype_of(v2))
                         })
                         .unwrap_or(false)
             }
@@ -103,25 +108,25 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::Vectorof(v1_all, v1_len), Type::Vector(v2)) => v1_len
                 .try_eval()
                 .map(|v1_len| {
-                    v1_len.as_usize() == v2.len() && v2.iter().all(|v2| v1_all.subtype(v2))
+                    v1_len.as_usize() == v2.len() && v2.iter().all(|v2| v1_all.subtype_of(v2))
                 })
                 .unwrap_or(false),
             (Type::Vectorof(v1_all, v1_len), Type::Vectorof(v2_all, v2_len)) => {
                 // equal lengths
-                v1_len == v2_len && v1_all.subtype(v2_all)
+                v1_len == v2_len && v1_all.subtype_of(v2_all)
             }
             (Type::Vectorof(_, _), Type::Struct(_, _)) => false,
             (Type::Vectorof(v1_all, v1_len), Type::Union(t, u)) => {
                 // Similar to elementwise vectors
-                self.subtype(t)
-                    || self.subtype(u)
+                self.subtype_of(t)
+                    || self.subtype_of(u)
                     || v1_len
                         .try_eval()
                         .and_then(|v1_len| {
                             let other = other.to_vector()?;
                             Some(
                                 other.len() == v1_len.as_usize()
-                                    && other.iter().all(|o| v1_all.subtype(o)),
+                                    && other.iter().all(|o| v1_all.subtype_of(o)),
                             )
                         })
                         .unwrap_or(false)
@@ -130,14 +135,14 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::Struct(_, _), Type::Vector(_)) => false,
             (Type::Struct(_, _), Type::Vectorof(_, _)) => false,
             (Type::Struct(a, _), Type::Struct(b, _)) => a == b,
-            (Type::Struct(_, _), Type::Union(t, u)) => self.subtype(t) || self.subtype(u),
+            (Type::Struct(_, _), Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
         }
     }
 
-    /// Subtracts another type, conservatively.
+    /// Subtracts another type, conservatively. That is, it produces a type that represents values that are in `self` but not in `other`.
     pub fn subtract(&self, other: &Self) -> Cow<Self> {
         // if we're a subtype of other, we're done
-        if self.subtype(other) {
+        if self.subtype_of(other) {
             return Cow::Owned(Type::None);
         }
         if let Type::Union(t, u) = other {
@@ -145,9 +150,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         }
         match self {
             Type::Union(x, y) => {
-                if x.subtype(other) {
+                if x.subtype_of(other) {
                     y.subtract(other)
-                } else if y.subtype(other) {
+                } else if y.subtype_of(other) {
                     x.subtract(other)
                 } else {
                     Cow::Owned(Type::Union(
@@ -199,14 +204,18 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         Cow::Borrowed(self)
                     } else if ay.leq(by) {
                         // this means the overlap is to the right,
-                        Cow::Owned(Type::NatRange(ax.clone(), bx.sub1().unwrap_or(bx.clone())))
+                        Cow::Owned(Type::NatRange(
+                            ax.clone(),
+                            bx.sub1().unwrap_or_else(|| bx.clone()),
+                        ))
                     } else if bx.leq(ax) {
                         // the overlap is to the left
                         Cow::Owned(Type::NatRange(by.clone().add1(), ay.clone()))
                     } else {
                         // punch a hole
                         Cow::Owned(Type::Union(
-                            Type::NatRange(ax.clone(), bx.sub1().unwrap_or(bx.clone())).into(),
+                            Type::NatRange(ax.clone(), bx.sub1().unwrap_or_else(|| bx.clone()))
+                                .into(),
                             Type::NatRange(by.add1(), ay.clone()).into(),
                         ))
                     }
@@ -321,9 +330,9 @@ mod tests {
         let r1: Type = Type::NatRange(0.into(), 500.into());
         let r2: Type = Type::NatRange(501.into(), 1000.into());
         let middle: Type = Type::NatRange(499.into(), 501.into());
-        assert!(middle.subtype(&Type::Union(r1.clone().into(), r2.clone().into())));
+        assert!(middle.subtype_of(&Type::Union(r1.clone().into(), r2.clone().into())));
         let middle: Type = Type::NatRange(499.into(), 1001.into());
-        assert!(!middle.subtype(&Type::Union(r1.into(), r2.into())));
+        assert!(!middle.subtype_of(&Type::Union(r1.into(), r2.into())));
     }
 
     #[test]
@@ -332,16 +341,16 @@ mod tests {
         let r1: Type = Type::NatRange(0.into(), 500.into());
         assert!(r1
             .subtract(&Type::NatRange(0.into(), 500.into()))
-            .subtype(&Type::None));
+            .subtype_of(&Type::None));
         assert!(r1
             .subtract(&Type::NatRange(0.into(), 400.into()))
-            .subtype(&Type::NatRange(401.into(), 500.into())));
+            .subtype_of(&Type::NatRange(401.into(), 500.into())));
         assert!(r1
             .subtract(&Type::NatRange(400.into(), 501.into()))
-            .subtype(&Type::NatRange(0.into(), 399.into())));
+            .subtype_of(&Type::NatRange(0.into(), 399.into())));
         assert!(r1
             .subtract(&Type::NatRange(100.into(), 400.into()))
-            .subtype(&Type::Union(
+            .subtype_of(&Type::Union(
                 Type::NatRange(0.into(), 99.into()).into(),
                 Type::NatRange(401.into(), 500.into()).into()
             )));
