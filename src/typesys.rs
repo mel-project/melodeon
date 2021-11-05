@@ -3,11 +3,13 @@ use std::hash::Hash;
 use std::sync::Arc;
 use std::{borrow::Cow, fmt::Debug};
 
-use crate::containers::{IStr, List, Void};
+use crate::containers::{List, Symbol, Void};
 
 pub trait Variable: Clone + Hash + Eq + Debug {}
 
 impl Variable for Void {}
+
+impl Variable for Symbol {}
 
 /// A Melodeon type. Generic over a "placeholder" type that represents type variables.
 ///
@@ -20,7 +22,7 @@ pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     NatRange(ConstExpr<CVar>, ConstExpr<CVar>),
     Vector(List<Self>),
     Vectorof(Arc<Self>, ConstExpr<CVar>),
-    Struct(IStr, List<Self>),
+    Struct(Symbol, List<Self>),
     Union(Arc<Self>, Arc<Self>),
 }
 
@@ -42,7 +44,7 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
 impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
-        log::debug!("checking {:?} <:? {:?}", self, other);
+        log::trace!("checking {:?} <:? {:?}", self, other);
         match (self, other) {
             (Type::None, _) => true,
             (_, Type::None) => false,
@@ -94,7 +96,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 self.subtype_of(t)
                     || self.subtype_of(u)
                     || other
-                        .to_vector()
+                        .try_to_vector()
                         .map(|other| {
                             v1.len() == other.len()
                                 && v1
@@ -123,7 +125,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     || v1_len
                         .try_eval()
                         .and_then(|v1_len| {
-                            let other = other.to_vector()?;
+                            let other = other.try_to_vector()?;
                             Some(
                                 other.len() == v1_len.as_usize()
                                     && other.iter().all(|o| v1_all.subtype_of(o)),
@@ -141,6 +143,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
 
     /// Subtracts another type, conservatively. That is, it produces a type that represents values that are in `self` but not in `other`.
     pub fn subtract(&self, other: &Self) -> Cow<Self> {
+        log::trace!("subtracting {:?} - {:?}", self, other);
         // if we're a subtype of other, we're done
         if self.subtype_of(other) {
             return Cow::Owned(Type::None);
@@ -162,7 +165,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 }
             }
             Type::Vector(elems) => {
-                if let Some(other) = other.to_vector() {
+                if let Some(other) = other.try_to_vector() {
                     // we subtract elements from the other side, pairwise
                     if other.len() != elems.len() {
                         // disjoint
@@ -227,8 +230,110 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         }
     }
 
-    /// Interpret a vector type into a list of types. Returns None if this is not a vector type, or if the vector type has an indeterminate length.
-    pub fn to_vector(&self) -> Option<Cow<List<Self>>> {
+    /// Fills in all type-variables, given a fallible function that resolves type-variables. If the resolution fails at any step, returns [None].
+    pub fn try_fill_tvars<NewTVar: Variable>(
+        &self,
+        mapping: impl Fn(&TVar) -> Option<Type<NewTVar, CVar>>,
+    ) -> Option<Type<NewTVar, CVar>> {
+        self.try_fill_tvars_inner(&mapping)
+    }
+
+    /// Fills in all type-variables, except infallibly.
+    pub fn fill_tvars<NewTVar: Variable>(
+        &self,
+        mapping: impl Fn(&TVar) -> Type<NewTVar, CVar>,
+    ) -> Type<NewTVar, CVar> {
+        self.try_fill_tvars(|tv| Some(mapping(tv))).unwrap()
+    }
+
+    // separate out for recursion
+    fn try_fill_tvars_inner<NewTVar: Variable>(
+        &self,
+        mapping: &impl Fn(&TVar) -> Option<Type<NewTVar, CVar>>,
+    ) -> Option<Type<NewTVar, CVar>> {
+        match self {
+            Type::None => Some(Type::None),
+            Type::Any => Some(Type::Any),
+            Type::Var(tvar) => mapping(tvar),
+            Type::NatRange(a, b) => Some(Type::NatRange(a.clone(), b.clone())),
+            Type::Vector(elems) => {
+                let elems: Option<List<_>> = elems
+                    .iter()
+                    .map(|e| e.try_fill_tvars_inner(mapping))
+                    .collect();
+                Some(Type::Vector(elems?))
+            }
+            Type::Vectorof(t, n) => Some(Type::Vectorof(
+                t.try_fill_tvars_inner(mapping)?.into(),
+                n.clone(),
+            )),
+            Type::Struct(name, b) => Some(Type::Struct(
+                *name,
+                b.iter()
+                    .map(|b| b.try_fill_tvars_inner(mapping))
+                    .collect::<Option<List<_>>>()?,
+            )),
+            Type::Union(a, b) => Some(Type::Union(
+                a.try_fill_tvars_inner(mapping)?.into(),
+                b.try_fill_tvars_inner(mapping)?.into(),
+            )),
+        }
+    }
+
+    /// Fills in all const-generic variables. If the resolution fails at any step, returns [None].
+    pub fn try_fill_cvars<NewCVar: Variable>(
+        &self,
+        mapping: impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+    ) -> Option<Type<TVar, NewCVar>> {
+        self.try_fill_cvars_inner(&mapping)
+    }
+
+    /// Fills in all const-generic variables. But infallible.
+    pub fn fill_cvars<NewCVar: Variable>(
+        &self,
+        mapping: impl Fn(&CVar) -> ConstExpr<NewCVar>,
+    ) -> Type<TVar, NewCVar> {
+        self.try_fill_cvars(|a| Some(mapping(a))).unwrap()
+    }
+
+    fn try_fill_cvars_inner<NewCVar: Variable>(
+        &self,
+        mapping: &impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+    ) -> Option<Type<TVar, NewCVar>> {
+        match self {
+            Type::None => Some(Type::None),
+            Type::Any => Some(Type::Any),
+            Type::Var(tvar) => Some(Type::Var(tvar.clone())),
+            Type::NatRange(a, b) => Some(Type::NatRange(
+                a.try_fill_inner(mapping)?,
+                b.try_fill_inner(mapping)?,
+            )),
+            Type::Vector(elems) => {
+                let elems: Option<List<_>> = elems
+                    .iter()
+                    .map(|e| e.try_fill_cvars_inner(mapping))
+                    .collect();
+                Some(Type::Vector(elems?))
+            }
+            Type::Vectorof(t, n) => Some(Type::Vectorof(
+                t.try_fill_cvars_inner(mapping)?.into(),
+                n.try_fill_inner(mapping)?,
+            )),
+            Type::Struct(name, b) => Some(Type::Struct(
+                *name,
+                b.iter()
+                    .map(|b| b.try_fill_cvars_inner(mapping))
+                    .collect::<Option<List<_>>>()?,
+            )),
+            Type::Union(a, b) => Some(Type::Union(
+                a.try_fill_cvars_inner(mapping)?.into(),
+                b.try_fill_cvars_inner(mapping)?.into(),
+            )),
+        }
+    }
+
+    /// Interpret a vector type into a list of types. Returns [None] if this is not a vector type, or if the vector type has an indeterminate length.
+    pub fn try_to_vector(&self) -> Option<Cow<List<Self>>> {
         match self {
             Type::Vectorof(inner, v) => {
                 let len = v.try_eval()?.as_usize();
@@ -240,8 +345,8 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             }
             Type::Vector(inner) => Some(Cow::Borrowed(inner)),
             Type::Union(x, y) => {
-                let x = x.to_vector()?;
-                let y = y.to_vector()?;
+                let x = x.try_to_vector()?;
+                let y = y.try_to_vector()?;
                 if x.len() != y.len() {
                     return None;
                 }
@@ -263,6 +368,7 @@ pub enum ConstExpr<CVar: Variable> {
     Literal(U256),
     Var(CVar),
     Plus(Arc<Self>, Arc<Self>),
+    Mult(Arc<Self>, Arc<Self>),
 }
 
 impl<CVar: Variable> Debug for ConstExpr<CVar> {
@@ -271,6 +377,7 @@ impl<CVar: Variable> Debug for ConstExpr<CVar> {
             ConstExpr::Literal(lit) => lit.fmt(f),
             ConstExpr::Var(v) => v.fmt(f),
             ConstExpr::Plus(a, b) => std::fmt::Display::fmt(&format!("({:?} + {:?})", a, b), f),
+            ConstExpr::Mult(a, b) => std::fmt::Display::fmt(&format!("({:?} * {:?})", a, b), f),
         }
     }
 }
@@ -285,12 +392,47 @@ impl<CVar: Variable> ConstExpr<CVar> {
                 .unwrap_or(false)
     }
 
+    /// Fills in the free variables fallibly, given a mapping.
+    pub fn try_fill<NewCVar: Variable>(
+        &self,
+        mapping: impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+    ) -> Option<ConstExpr<NewCVar>> {
+        self.try_fill_inner(&mapping)
+    }
+
+    /// Fills in the free variables infallibly, given a mapping.
+    pub fn fill<NewCVar: Variable>(
+        &self,
+        mapping: impl Fn(&CVar) -> ConstExpr<NewCVar>,
+    ) -> ConstExpr<NewCVar> {
+        self.try_fill(|a| Some(mapping(a))).unwrap()
+    }
+
+    fn try_fill_inner<NewCVar: Variable>(
+        &self,
+        mapping: &impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+    ) -> Option<ConstExpr<NewCVar>> {
+        match self {
+            ConstExpr::Literal(lit) => Some(ConstExpr::Literal(*lit)),
+            ConstExpr::Var(cvar) => mapping(cvar),
+            ConstExpr::Plus(a, b) => Some(ConstExpr::Plus(
+                a.try_fill_inner(mapping)?.into(),
+                b.try_fill_inner(mapping)?.into(),
+            )),
+            ConstExpr::Mult(a, b) => Some(ConstExpr::Mult(
+                a.try_fill_inner(mapping)?.into(),
+                b.try_fill_inner(mapping)?.into(),
+            )),
+        }
+    }
+
     /// Reduces the const-expr down to a single number if possible
     pub fn try_eval(&self) -> Option<U256> {
         match self {
             ConstExpr::Var(_) => None,
             ConstExpr::Plus(x, y) => Some(x.try_eval()? + y.try_eval()?),
             ConstExpr::Literal(x) => Some(*x),
+            ConstExpr::Mult(x, y) => Some(x.try_eval()? * y.try_eval()?),
         }
     }
 
@@ -333,6 +475,38 @@ mod tests {
         assert!(middle.subtype_of(&Type::Union(r1.clone().into(), r2.clone().into())));
         let middle: Type = Type::NatRange(499.into(), 1001.into());
         assert!(!middle.subtype_of(&Type::Union(r1.into(), r2.into())));
+    }
+
+    #[test]
+    fn simple_fill() {
+        init_logs();
+        let r1: Type<Symbol, Symbol> = Type::Vector(
+            [
+                Type::NatRange(0.into(), 10.into()),
+                Type::NatRange(10.into(), 20.into()),
+                Type::Var(Symbol::from("T")),
+                Type::Vectorof(
+                    Type::Var(Symbol::from("T")).into(),
+                    ConstExpr::Plus(Arc::new(1.into()), ConstExpr::Var(Symbol::from("n")).into()),
+                ),
+                Type::Vectorof(
+                    Type::Var(Symbol::from("U")).into(),
+                    ConstExpr::Plus(Arc::new(1.into()), ConstExpr::Var(Symbol::from("n")).into()),
+                ),
+            ]
+            .into(),
+        );
+        let resolved: Type = r1
+            .fill_tvars(|sym| {
+                if sym == &Symbol::from("T") {
+                    Type::NatRange(0.into(), 1000.into())
+                } else {
+                    Type::NatRange(1000.into(), 2000.into())
+                }
+            })
+            .fill_cvars(|_| 100.into());
+        log::info!("before substitution: {:?}", r1);
+        log::info!("after substitution: {:?}", resolved);
     }
 
     #[test]
