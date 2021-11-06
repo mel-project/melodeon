@@ -12,10 +12,13 @@ impl Variable for Void {}
 
 impl Variable for Symbol {}
 
-/// A Melodeon type. [`Type`] is generic over two parameters, `TVar` and `CVar`, which represent the type for type-variables as well as the type for constant-generic variables.
-/// These are generic types in order to statically guarantee the status of free variables. For example, one may start with `Type<RawTVar, RawCVar>`, turn that into `Type<MangledTVar, MangledCVar>`, and resolve that into [`Type`].
+/// A Melodeon type. [`Type`] is generic over two parameters, `TVar` and `CVar`, which represent the type for
+/// type-variables as well as the type for constant-generic variables.
+/// These are generic types in order to statically guarantee the status of free variables. For example, one may start
+/// with `Type<RawTVar, RawCVar>`, turn that into `Type<MangledTVar, MangledCVar>`, and resolve that into [`Type`].
 ///
-/// [`Type`] is an alias for [`Type<Void, Void>`], representing a type with *no* free variables. [`Void`] is a special type that cannot be constructed, so a value of [`Type<Void, Void>`] *statically* guarantees a lack of free variables.
+/// [`Type`] is an alias for [`Type<Void, Void>`], representing a type with *no* free variables. [`Void`] is a special
+/// type that cannot be constructed, so a value of [`Type<Void, Void>`] *statically* guarantees a lack of free variables.
 ///
 /// In general, typechecking code should not directly match against [`Type`]. Instead, use the subtyping and unification methods as needed.
 #[derive(Clone)]
