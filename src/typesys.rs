@@ -266,6 +266,41 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             .collect()
     }
 
+    /// Similar to [`Type::unify_tvars`], but for const-generic variables instead.
+    pub fn unify_cvars<TVar2: Variable, CVar2: Variable>(
+        &self,
+        other: &Type<TVar2, CVar2>,
+    ) -> Option<Map<CVar, ConstExpr<CVar2>>> {
+        log::trace!("unify_cvars {:?} with {:?}", self, other);
+        // First, we find all the locations where const-generic parameters appear. This is actually just a list of locations where if we index there, we will find a type containing a const-generic parameter.
+        let locations = self.cvar_locations();
+        // Then, we establish a bunch of equations by indexing into those locations in both sides and creating equations.
+        let mut accum = Map::new();
+        for location in locations {
+            let this_elem =
+                self.index_iterated(location.iter().cloned().map(|f| f.map(ConstExpr::from)))?;
+            let other_elem =
+                other.index_iterated(location.iter().cloned().map(|f| f.map(ConstExpr::from)))?;
+            match (this_elem, other_elem) {
+                (
+                    Type::NatRange(ConstExpr::Var(ax), ConstExpr::Var(ay)),
+                    Type::NatRange(bx, by),
+                ) => {
+                    accum.insert(ax, bx);
+                    accum.insert(ay, by);
+                }
+                (Type::Vectorof(_, ConstExpr::Var(var)), Type::Vectorof(_, real)) => {
+                    accum.insert(var, real);
+                }
+                (a, b) => log::warn!(
+                    "does not yet support nontrivial const-generic variables (matching {:?} with {:?})",
+                    a, b
+                ),
+            }
+        }
+        Some(accum)
+    }
+
     /// Indexes into this type. None indicates a generalized index.
     pub fn index(&self, idx: Option<&ConstExpr<CVar>>) -> Option<Cow<Self>> {
         match self {
@@ -301,6 +336,18 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         }
     }
 
+    /// Helper function that indexes into an iterator of locations.
+    pub fn index_iterated(
+        &self,
+        indices: impl Iterator<Item = Option<ConstExpr<CVar>>>,
+    ) -> Option<Self> {
+        let mut ptr = self.clone();
+        for index in indices {
+            ptr = ptr.index(index.as_ref())?.into_owned();
+        }
+        Some(ptr)
+    }
+
     /// "Smart" union that is a no-op if one of the types is actually a subtype of another
     pub fn smart_union(&self, other: &Self) -> Self {
         if self.subtype_of(other) {
@@ -309,6 +356,42 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             self.clone()
         } else {
             Type::Union(self.clone().into(), other.clone().into())
+        }
+    }
+
+    /// Returns the set of all locations where constant-generic parameters appear.
+    fn cvar_locations(&self) -> Set<List<Option<usize>>> {
+        match self {
+            Type::None => Set::new(),
+            Type::Any => Set::new(),
+            Type::Var(_) => Set::new(),
+            Type::NatRange(_, _) => [List::new()].into_iter().collect(),
+            Type::Vector(elems) => elems
+                .iter()
+                .map(|elem| elem.cvar_locations())
+                .enumerate()
+                .fold(Set::new(), |accum, (idx, inner_locations)| {
+                    accum.union(
+                        inner_locations
+                            .into_iter()
+                            .map(|mut v| {
+                                v.insert(0, Some(idx));
+                                v
+                            })
+                            .collect(),
+                    )
+                }),
+            Type::Vectorof(inner, _) => inner
+                .cvar_locations()
+                .into_iter()
+                .map(|mut loc| {
+                    loc.insert(0, None);
+                    loc
+                })
+                .chain(std::iter::once(List::new()))
+                .collect(),
+            Type::Struct(_, i) => Type::Vector(i.clone()).cvar_locations(),
+            Type::Union(t, u) => t.cvar_locations().union(u.cvar_locations()),
         }
     }
 
@@ -626,7 +709,7 @@ mod tests {
                 Type::Var(Symbol::from("T")),
                 Type::Vectorof(
                     Type::Var(Symbol::from("T")).into(),
-                    ConstExpr::Plus(Arc::new(1.into()), ConstExpr::Var(Symbol::from("n")).into()),
+                    ConstExpr::Var(Symbol::from("n")),
                 ),
                 Type::Vectorof(
                     Type::Var(Symbol::from("U")).into(),
@@ -646,7 +729,8 @@ mod tests {
             .fill_cvars(|_| 100.into());
         log::info!("before substitution: {:?}", r1);
         log::info!("after substitution: {:?}", resolved);
-        log::info!("unification: {:?}", r1.unify_tvars(&resolved));
+        log::info!("tvar unification: {:?}", r1.unify_tvars(&resolved));
+        log::info!("cvar unification: {:?}", r1.unify_cvars(&resolved));
     }
 
     #[test]
