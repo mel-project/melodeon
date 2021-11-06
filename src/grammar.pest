@@ -1,0 +1,51 @@
+// "lexer" items
+reserved = @{"let" | "in" }
+nat_literal = @{ !reserved ~ ASCII_DIGIT+ }
+type_name   = @{ !reserved ~ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
+var_name    = @{ !reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
+WHITESPACE = _{" " | "\t" | "\n"}
+
+// top-level program
+program = {
+    SOI ~ definition+ ~ "-" ~ "-" ~ "-" ~ expr ~ EOI |
+    SOI ~ definition+ ~ EOI |
+    SOI ~ expr ~ EOI
+}
+
+// definitions
+definition = {
+    "def" ~ var_name ~ "(" ~ fun_args ~ ")" ~ "=" ~ expr 
+}
+
+fun_args = {
+    (var_name ~ ":" ~ type_expr ~ ",")* ~ var_name ~ ":" ~ type_expr
+}
+
+// types
+type_expr = {
+    type_name
+}
+
+// expression
+expr = {
+    let_expr |
+    bin_expr
+}
+
+let_expr = {
+    "let" ~ var_name ~ "=" ~ expr ~ "in" ~ expr
+}
+
+bin_expr = {
+    add_expr
+}
+
+add_expr = { mult_expr ~ (("+" | "-") ~ mult_expr)* }
+mult_expr = { terminal_expr ~ (("*" | "/") ~ terminal_expr)* }
+
+terminal_expr = _{
+    nat_literal |
+    var_name |
+    let_expr |
+    "(" ~ expr ~ ")"
+}
