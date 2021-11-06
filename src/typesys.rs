@@ -61,14 +61,18 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::Union(t, u), anything) => t.subtype_of(anything) && u.subtype_of(anything),
             (Type::Var(x), Type::Var(y)) => x == y,
             (Type::Var(_), Type::Union(t, u)) => {
-                // conservatively
+                // This is the "union rule". It is conservative and sound, but imprecise, because the left-hand type might be a *combination* of some subtype of T and some subtype of U, while not a subtype of either.
+                // But because the LHS here is just a single variable, we cannot further investigate, so we do the best we can.
                 self.subtype_of(t) || self.subtype_of(u)
             }
             (Type::Var(_), _) => false,
             (_, Type::Var(_)) => false,
             (Type::NatRange(ax, ay), Type::NatRange(bx, by)) => bx.leq(ax) && ay.leq(by),
             (Type::NatRange(a, b), Type::Union(t, u)) => {
-                // we only apply the union rule if either both sides of the range are the same number, or they cannot  be evaluated down to numbers. otherwise, we break down the LHS too.
+                // we only apply the union rule in two cases:
+                // - both sides of the range are the same number. This means that this is literally a single number. In this case, the union rule is actually precise: a single number being a subtype of T | U means that it must be a subtype of at least one of T or U.
+                // - the range has const-generic parameters. we cannot investigate further, so the "union rule" is the best we can do.
+                // otherwise, we can do better than apply the union rule. We try the union rule because in most cases it works, but if it does not, we break the range down into two halves and handle them separately. This eventually "bottoms out" as either a simple number or some other thing where the union rule works.
                 if let Some((a, b)) = a.try_eval().and_then(|a| Some((a, b.try_eval()?))) {
                     if a == b {
                         self.subtype_of(t) || self.subtype_of(u)
@@ -100,7 +104,8 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::Vector(_), Type::Struct(_, _)) => false,
             (Type::Vector(v1), Type::Union(t, u)) => {
                 // We "look into" the RHS vector. This is more precise than the union rule.
-                // We still apply the union rule first because that's faster, doesn't allocate, etc.
+                // We still apply the union rule first because that's faster and doesn't allocate.
+                // Because the union rule is conservative, it never gives us false positives, so we can always use it as a first try.
                 self.subtype_of(t)
                     || self.subtype_of(u)
                     || other
@@ -145,6 +150,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::Struct(_, _), Type::Vector(_)) => false,
             (Type::Struct(_, _), Type::Vectorof(_, _)) => false,
             (Type::Struct(a, _), Type::Struct(b, _)) => a == b,
+            // Structs are "atomic", just like individual numbers, so the union rule is in fact precise.
             (Type::Struct(_, _), Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
         }
     }
@@ -580,6 +586,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
     }
 }
 
+/// Represents a rather surface-level const-expression. Polynomial-based canonicalization is not yet here.
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum ConstExpr<CVar: Variable> {
     Literal(U256),
