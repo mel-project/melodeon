@@ -2,8 +2,9 @@ use ethnum::U256;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::{borrow::Cow, fmt::Debug};
+use tap::Tap;
 
-use crate::containers::{List, Symbol, Void};
+use crate::containers::{List, Map, Set, Symbol, Void};
 
 pub trait Variable: Clone + Hash + Eq + Debug {}
 
@@ -11,9 +12,12 @@ impl Variable for Void {}
 
 impl Variable for Symbol {}
 
-/// A Melodeon type. Generic over a "placeholder" type that represents type variables.
+/// A Melodeon type. [`Type`] is generic over two parameters, `TVar` and `CVar`, which represent the type for type-variables as well as the type for constant-generic variables.
+/// These are generic types in order to statically guarantee the status of free variables. For example, one may start with `Type<RawTVar, RawCVar>`, turn that into `Type<MangledTVar, MangledCVar>`, and resolve that into [`Type`].
 ///
-/// In general, typechecking code should not directly match against Type. Instead, use the subtyping and unification methods as needed.
+/// [`Type`] is an alias for [`Type<Void, Void>`], representing a type with *no* free variables. [`Void`] is a special type that cannot be constructed, so a value of [`Type<Void, Void>`] *statically* guarantees a lack of free variables.
+///
+/// In general, typechecking code should not directly match against [`Type`]. Instead, use the subtyping and unification methods as needed.
 #[derive(Clone)]
 pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     None,
@@ -42,6 +46,10 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
 }
 
 impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
+    /// Equivalence relation. Returns true iff `self` and `other` are subtypes of each other.
+    pub fn equiv_to(&self, other: &Self) -> bool {
+        self.subtype_of(other) && other.subtype_of(other)
+    }
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
         log::trace!("checking {:?} <:? {:?}", self, other);
@@ -141,7 +149,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         }
     }
 
-    /// Subtracts another type, conservatively. That is, it produces a type that represents values that are in `self` but not in `other`.
+    /// Subtracts another type, *conservatively*. That is, it produces a type that includes *at least* all the values that are in `self` but not in `other`, but it may include more in difficult-to-calculate cases.
     pub fn subtract(&self, other: &Self) -> Cow<Self> {
         log::trace!("subtracting {:?} - {:?}", self, other);
         // if we're a subtype of other, we're done
@@ -227,6 +235,132 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 }
             }
             Type::Struct(_, _) => Cow::Borrowed(self),
+        }
+    }
+
+    /// Using the current type (which contains typevars of type TVar) as a template, as well as a different type where the "holes" formed by these typevars are filled, derive a mapping between the free typevars of [self] and types.
+    pub fn unify_tvars<TVar2: Variable, CVar2: Variable>(
+        &self,
+        other: &Type<TVar2, CVar2>,
+    ) -> Option<Map<TVar, Type<TVar2, CVar2>>> {
+        log::trace!("unify_tvars {:?} with {:?}", self, other);
+        // First, we find out exactly *where* in self do the typevars appear.
+        let locations = self.tvar_locations();
+        log::trace!("found locations: {:?}", locations);
+        // Then, we index into other to find out what concrete types those tvars represent
+        locations
+            .into_iter()
+            .map(|(var, locations)| {
+                locations
+                    .into_iter()
+                    .fold(Some(Type::None), |accum, elem| {
+                        let accum = accum?;
+                        let mut ptr = other.clone();
+                        for elem in elem {
+                            ptr = ptr.index(elem.map(ConstExpr::from).as_ref())?.into_owned();
+                        }
+                        Some(accum.smart_union(&ptr))
+                    })
+                    .map(|other_piece| (var, other_piece))
+            })
+            .collect()
+    }
+
+    /// Indexes into this type. None indicates a generalized index.
+    pub fn index(&self, idx: Option<&ConstExpr<CVar>>) -> Option<Cow<Self>> {
+        match self {
+            Type::Vector(elems) => {
+                if let Some(idx) = idx {
+                    let idx = idx.try_eval()?.as_usize();
+                    Some(Cow::Borrowed(elems.get(idx)?))
+                } else {
+                    Some(Cow::Owned(
+                        elems.iter().fold(Type::None, |a, b| a.smart_union(b)),
+                    ))
+                }
+            }
+            Type::Vectorof(t, n) => {
+                if let Some(idx) = idx {
+                    if idx.add1().leq(n) {
+                        Some(Cow::Owned(t.as_ref().clone()))
+                    } else {
+                        None
+                    }
+                } else {
+                    Some(Cow::Owned(t.as_ref().clone()))
+                }
+            }
+            Type::Struct(_, b) => {
+                Some(Cow::Owned(Type::Vector(b.clone()).index(idx)?.into_owned()))
+            }
+            Type::Union(a, b) => Some(Cow::Owned(Type::Union(
+                a.index(idx)?.into_owned().into(),
+                b.index(idx)?.into_owned().into(),
+            ))),
+            _ => None,
+        }
+    }
+
+    /// "Smart" union that is a no-op if one of the types is actually a subtype of another
+    pub fn smart_union(&self, other: &Self) -> Self {
+        if self.subtype_of(other) {
+            other.clone()
+        } else if other.subtype_of(self) {
+            self.clone()
+        } else {
+            Type::Union(self.clone().into(), other.clone().into())
+        }
+    }
+
+    /// Creates a mapping of free type variables and their locations in the type. Locations are represented as indexes. An index is either a number, or None, which represents "all".
+    fn tvar_locations(&self) -> Map<TVar, Set<List<Option<usize>>>> {
+        match self {
+            Type::Var(tvar) => Map::new().tap_mut(|map| {
+                map.insert(tvar.clone(), [List::new()].into_iter().collect());
+            }),
+            Type::Vector(vec) => {
+                let mut mapping = Map::new();
+                for (idx, v) in vec.iter().enumerate() {
+                    let child_map: Map<TVar, Set<List<Option<usize>>>> = v
+                        .tvar_locations()
+                        .into_iter()
+                        .map(|(k, v)| {
+                            (
+                                k,
+                                v.into_iter()
+                                    .map(|v| v.tap_mut(|v| v.insert(0, Some(idx))))
+                                    .collect(),
+                            )
+                        })
+                        .collect();
+                    mapping = mapping.union_with(child_map, |a, b| a.union(b));
+                }
+                mapping
+            }
+            Type::Vectorof(t, _) => {
+                let inner_map = t.tvar_locations();
+                inner_map
+                    .into_iter()
+                    .map(|(k, v)| {
+                        (
+                            k,
+                            v.into_iter()
+                                .map(|mut v| {
+                                    v.insert(0, None);
+                                    v
+                                })
+                                .collect(),
+                        )
+                    })
+                    .collect()
+            }
+            Type::Struct(_, inner) => Type::Vector(inner.clone()).tvar_locations(),
+            Type::Union(a, b) => {
+                let a = a.tvar_locations();
+                let b = b.tvar_locations();
+                a.union_with(b, |a, b| a.union(b))
+            }
+            _ => Map::new(),
         }
     }
 
@@ -454,6 +588,12 @@ impl<CVar: Variable> From<i32> for ConstExpr<CVar> {
     }
 }
 
+impl<CVar: Variable> From<usize> for ConstExpr<CVar> {
+    fn from(i: usize) -> Self {
+        ConstExpr::Literal((i as u64).into())
+    }
+}
+
 impl<CVar: Variable> From<U256> for ConstExpr<CVar> {
     fn from(i: U256) -> Self {
         ConstExpr::Literal(i)
@@ -462,7 +602,6 @@ impl<CVar: Variable> From<U256> for ConstExpr<CVar> {
 
 #[cfg(test)]
 mod tests {
-
     use log::LevelFilter;
 
     use super::*;
@@ -507,6 +646,7 @@ mod tests {
             .fill_cvars(|_| 100.into());
         log::info!("before substitution: {:?}", r1);
         log::info!("after substitution: {:?}", resolved);
+        log::info!("unification: {:?}", r1.unify_tvars(&resolved));
     }
 
     #[test]
@@ -515,16 +655,16 @@ mod tests {
         let r1: Type = Type::NatRange(0.into(), 500.into());
         assert!(r1
             .subtract(&Type::NatRange(0.into(), 500.into()))
-            .subtype_of(&Type::None));
+            .equiv_to(&Type::None));
         assert!(r1
             .subtract(&Type::NatRange(0.into(), 400.into()))
-            .subtype_of(&Type::NatRange(401.into(), 500.into())));
+            .equiv_to(&Type::NatRange(401.into(), 500.into())));
         assert!(r1
             .subtract(&Type::NatRange(400.into(), 501.into()))
-            .subtype_of(&Type::NatRange(0.into(), 399.into())));
+            .equiv_to(&Type::NatRange(0.into(), 399.into())));
         assert!(r1
             .subtract(&Type::NatRange(100.into(), 400.into()))
-            .subtype_of(&Type::Union(
+            .equiv_to(&Type::Union(
                 Type::NatRange(0.into(), 99.into()).into(),
                 Type::NatRange(401.into(), 500.into()).into()
             )));
