@@ -14,7 +14,7 @@ pub type Set<T> = imbl::HashSet<T>;
 pub type Map<K, V> = imbl::HashMap<K, V>;
 
 /// Interned string with O(1) equality and hashing.
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Symbol(Intern<String>);
 
 impl Debug for Symbol {

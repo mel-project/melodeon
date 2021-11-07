@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.45"
 catvec = "0.1.2"
+derive_more = "0.99.16"
 ethnum = "1.0.3"
 imbl = "1.0.1"
 internment = "0.5.4"
@@ -17,6 +19,7 @@ rustc-hash = "1.1.0"
 scopeguard = "1.1.0"
 smallvec = "1.7.0"
 tap = "1.0.1"
+thiserror = "1.0.30"
 
 [dev-dependencies]
 env_logger="0.9"
