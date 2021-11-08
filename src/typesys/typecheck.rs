@@ -1,10 +1,10 @@
 use std::ops::Deref;
 
-use ethnum::U256;
+use anyhow::Context;
 
 use crate::{
     containers::{Symbol, Void},
-    context::{Ctx, CtxLocation, CtxResult, ToCtx},
+    context::{Ctx, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::RawExpr,
     typesys::{BinOp, ConstExpr, ExprInner, Type},
 };
@@ -47,42 +47,89 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
     let recurse = |c| typecheck_expr(state.clone(), c);
     let ctx = raw.ctx();
     match raw.deref().clone() {
-        RawExpr::Let(_, _, _) => todo!(),
+        RawExpr::Let(var, value, body) => {
+            let value = recurse(value)?;
+            let body = typecheck_expr(state.clone().bind_var(*var, value.itype.clone()), body)?;
+            Ok(Expr {
+                itype: body.itype.clone(),
+                inner: ExprInner::Let(*var, value.into(), body.into()),
+            })
+        }
         RawExpr::If(_, _, _) => todo!(),
         RawExpr::BinOp(op, a, b) => {
             let a = recurse(a)?;
             let b = recurse(b)?;
-            // both must be numbers
-            assert_subtype(ctx, &a.itype, &Type::all_nat())?;
-            assert_subtype(ctx, &b.itype, &Type::all_nat())?;
-            let template: Type<Void, i32> = Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
-            let a_range = template.unify_cvars(&a.itype).unwrap();
-            let b_range = template.unify_cvars(&b.itype).unwrap();
-            match op.deref() {
-                crate::grammar::BinOp::Add => {
-                    // if the bounds are numbers, we can actually compute the range
-                    let lower_bound =
-                        ConstExpr::Plus(a_range[&0].clone().into(), b_range[&0].clone().into())
-                            .simplify();
-                    let upper_bound =
-                        ConstExpr::Plus(a_range[&1].clone().into(), b_range[&1].clone().into())
-                            .simplify();
-                    Ok(Expr {
-                        itype: Type::NatRange(lower_bound, upper_bound),
-                        inner: ExprInner::BinOp(BinOp::Add, a.into(), b.into()),
-                    })
+            let op = *op.deref();
+            if let crate::grammar::BinOp::Eq = op {
+                Ok(Expr {
+                    itype: Type::NatRange(0.into(), 1.into()),
+                    inner: ExprInner::BinOp(BinOp::Eq, a.into(), b.into()),
+                })
+            } else {
+                // both must be numbers
+                assert_subtype(ctx, &a.itype, &Type::all_nat())?;
+                assert_subtype(ctx, &b.itype, &Type::all_nat())?;
+                let template: Type<Void, i32> =
+                    Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
+                let a_range = template.unify_cvars(&a.itype).unwrap();
+                let b_range = template.unify_cvars(&b.itype).unwrap();
+                match op {
+                    crate::grammar::BinOp::Add => {
+                        // add the two ranges
+                        let lower_bound =
+                            ConstExpr::Plus(a_range[&0].clone().into(), b_range[&0].clone().into())
+                                .simplify();
+                        let upper_bound =
+                            ConstExpr::Plus(a_range[&1].clone().into(), b_range[&1].clone().into())
+                                .simplify();
+                        Ok(Expr {
+                            itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
+                            inner: ExprInner::BinOp(BinOp::Add, a.into(), b.into()),
+                        })
+                    }
+                    crate::grammar::BinOp::Sub => {
+                        // cannot subtract CGs correctly at the moment
+                        Ok(Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::BinOp(BinOp::Sub, a.into(), b.into()),
+                        })
+                    }
+                    crate::grammar::BinOp::Mul => {
+                        // add the two ranges
+                        let lower_bound =
+                            ConstExpr::Mult(a_range[&0].clone().into(), b_range[&0].clone().into())
+                                .simplify();
+                        let upper_bound =
+                            ConstExpr::Mult(a_range[&1].clone().into(), b_range[&1].clone().into())
+                                .simplify();
+                        Ok(Expr {
+                            itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
+                            inner: ExprInner::BinOp(BinOp::Mul, a.into(), b.into()),
+                        })
+                    }
+                    // cannot divide CGs correctly at the moment
+                    crate::grammar::BinOp::Div => Ok(Expr {
+                        itype: Type::all_nat(),
+                        inner: ExprInner::BinOp(BinOp::Div, a.into(), b.into()),
+                    }),
+                    crate::grammar::BinOp::Eq => unreachable!(),
                 }
-                crate::grammar::BinOp::Sub => todo!(),
-                crate::grammar::BinOp::Mul => todo!(),
-                crate::grammar::BinOp::Div => todo!(),
-                crate::grammar::BinOp::Eq => todo!(),
             }
         }
         RawExpr::LitNum(num) => Ok(Expr {
             itype: Type::NatRange(num.into(), num.into()),
             inner: ExprInner::LitNum(num),
         }),
-        RawExpr::Var(_) => todo!(),
+        RawExpr::Var(v) => {
+            let itype = state
+                .lookup_var(v)
+                .context("undefined variable")
+                .err_ctx(ctx)?;
+            Ok(Expr {
+                itype,
+                inner: ExprInner::Var(v),
+            })
+        }
         RawExpr::Apply(_, _) => todo!(),
         RawExpr::Field(_, _) => todo!(),
         RawExpr::VectorRef(_, _) => todo!(),
@@ -92,6 +139,8 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
 
 #[cfg(test)]
 mod tests {
+    use ethnum::U256;
+
     use super::*;
     use crate::{containers::Void, context::ModuleId, grammar::parse_program};
 
@@ -101,7 +150,14 @@ mod tests {
         let module = ModuleId(Symbol::from("whatever.melo"));
         eprintln!(
             "{:?}",
-            typecheck_expr(state, parse_program("1 + 2", module).unwrap().body.clone()).unwrap()
+            typecheck_expr(
+                state,
+                parse_program(&format!("let x = 0 in {} + 1 == x", U256::MAX), module)
+                    .unwrap()
+                    .body
+                    .clone()
+            )
+            .unwrap()
         );
     }
 }

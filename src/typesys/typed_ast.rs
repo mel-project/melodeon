@@ -36,6 +36,7 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
     Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     Apply(Arc<Expr<TVar, CVar>>, List<Arc<Expr<TVar, CVar>>>),
     LitNum(U256),
+    Var(Symbol),
 }
 
 /// Binary operator

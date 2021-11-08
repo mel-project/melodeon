@@ -372,6 +372,21 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         }
     }
 
+    /// Fixes an illegal NatRange by turning it into a full-range Nat instead.
+    ///
+    /// TODO: is this sound?
+    pub fn fix_natrange(self) -> Self {
+        if let Type::NatRange(a, b) = &self {
+            if !a.leq(b) {
+                Type::all_nat()
+            } else {
+                self
+            }
+        } else {
+            self
+        }
+    }
+
     /// Returns the set of all locations where constant-generic parameters appear.
     fn cvar_locations(&self) -> Set<List<Option<usize>>> {
         match self {
@@ -671,9 +686,9 @@ impl<CVar: Variable> ConstExpr<CVar> {
     pub fn try_eval(&self) -> Option<U256> {
         match self {
             ConstExpr::Var(_) => None,
-            ConstExpr::Plus(x, y) => Some(x.try_eval()? + y.try_eval()?),
+            ConstExpr::Plus(x, y) => Some(x.try_eval()?.wrapping_add(y.try_eval()?)),
             ConstExpr::Literal(x) => Some(*x),
-            ConstExpr::Mult(x, y) => Some(x.try_eval()? * y.try_eval()?),
+            ConstExpr::Mult(x, y) => Some(x.try_eval()?.wrapping_mul(y.try_eval()?)),
         }
     }
 
