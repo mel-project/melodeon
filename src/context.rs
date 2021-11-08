@@ -1,6 +1,6 @@
-use std::{fmt::Debug, ops::Deref, sync::Arc};
-
 use crate::containers::Symbol;
+
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 /// Represents the unique ID of a module.
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug)]

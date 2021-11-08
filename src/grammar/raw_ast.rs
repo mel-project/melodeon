@@ -1,15 +1,33 @@
-use ethnum::U256;
-
 use crate::{
     containers::{List, Symbol},
     context::Ctx,
 };
 
-/// A whole program.
+use ethnum::U256;
+
+/// A raw constant expression.
 #[derive(Clone, Debug)]
-pub struct RawProgram {
-    pub definitions: List<Ctx<RawDefn>>,
-    pub body: Ctx<RawExpr>,
+pub enum RawConstExpr {
+    Sym(Symbol),
+    Lit(U256),
+    Plus(Ctx<Self>, Ctx<Self>),
+    Mult(Ctx<Self>, Ctx<Self>),
+}
+
+/// A raw type expression
+#[derive(Clone, Debug)]
+pub enum RawTypeExpr {
+    Sym(Symbol),
+    Union(Ctx<Self>, Ctx<Self>),
+    Vector(List<Ctx<Self>>),
+    Vectorof(Ctx<Self>, Ctx<RawConstExpr>),
+}
+
+/// A type binding
+#[derive(Clone, Debug)]
+pub struct RawTypeBind {
+    pub name: Ctx<Symbol>,
+    pub bind: Ctx<RawTypeExpr>,
 }
 
 /// A definition.
@@ -26,31 +44,6 @@ pub enum RawDefn {
     Constant(Ctx<Symbol>, Ctx<RawExpr>),
 }
 
-/// A type binding
-#[derive(Clone, Debug)]
-pub struct RawTypeBind {
-    pub name: Ctx<Symbol>,
-    pub bind: Ctx<RawTypeExpr>,
-}
-
-/// A raw type expression
-#[derive(Clone, Debug)]
-pub enum RawTypeExpr {
-    Sym(Symbol),
-    Union(Ctx<Self>, Ctx<Self>),
-    Vector(List<Ctx<Self>>),
-    Vectorof(Ctx<Self>, Ctx<RawConstExpr>),
-}
-
-/// A raw constant expression.
-#[derive(Clone, Debug)]
-pub enum RawConstExpr {
-    Sym(Symbol),
-    Lit(U256),
-    Plus(Ctx<Self>, Ctx<Self>),
-    Mult(Ctx<Self>, Ctx<Self>),
-}
-
 /// A raw expression.
 #[derive(Clone, Debug)]
 pub enum RawExpr {
@@ -65,6 +58,13 @@ pub enum RawExpr {
     Field(Ctx<Self>, Ctx<Symbol>),
     VectorRef(Ctx<Self>, Ctx<Self>),
     VectorUpdate(Ctx<Self>, Ctx<Self>),
+}
+
+/// A whole program.
+#[derive(Clone, Debug)]
+pub struct RawProgram {
+    pub definitions: List<Ctx<RawDefn>>,
+    pub body: Ctx<RawExpr>,
 }
 
 /// Binary operator
