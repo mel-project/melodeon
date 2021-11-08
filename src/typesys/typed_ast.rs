@@ -1,15 +1,14 @@
+use crate::containers::{List, Symbol, Void};
+use crate::typesys::{Type, Variable};
+
 use std::sync::Arc;
 
 use ethnum::U256;
 
-use crate::containers::{List, Symbol, Void};
-
-use super::{Type, Variable};
-
 #[derive(Debug, Clone)]
-pub struct Program {
-    pub fun_defs: List<FunDefn>,
-    pub body: Expr,
+pub struct Expr<TVar: Variable = Void, CVar: Variable = Void> {
+    pub itype: Type<TVar, CVar>,
+    pub inner: ExprInner<TVar, CVar>,
 }
 
 #[derive(Debug, Clone)]
@@ -20,9 +19,9 @@ pub struct FunDefn<TVar: Variable = Void, CVar: Variable = Void> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Expr<TVar: Variable = Void, CVar: Variable = Void> {
-    pub itype: Type<TVar, CVar>,
-    pub inner: ExprInner<TVar, CVar>,
+pub struct Program {
+    pub fun_defs: List<FunDefn>,
+    pub body: Expr,
 }
 
 #[derive(Debug, Clone)]

@@ -1,10 +1,10 @@
+use crate::containers::{List, Map, Set, Symbol, Void};
+
 use ethnum::U256;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::{borrow::Cow, fmt::Debug};
 use tap::Tap;
-
-use crate::containers::{List, Map, Set, Symbol, Void};
 
 pub trait Variable: Clone + Hash + Eq + Debug {}
 
@@ -724,9 +724,11 @@ impl<CVar: Variable> From<U256> for ConstExpr<CVar> {
 
 #[cfg(test)]
 mod tests {
+    use crate::typesys::{ConstExpr, Type};
+    use crate::typesys::types::{Arc, Symbol};
+
     use log::LevelFilter;
 
-    use super::*;
     #[test]
     fn tricky_range() {
         init_logs();
