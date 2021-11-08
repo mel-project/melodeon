@@ -1,3 +1,9 @@
+use crate::{
+    containers::{List, Symbol},
+    context::{Ctx, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
+    grammar::{BinOp ,RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr}
+};
+
 use std::cell::Cell;
 
 use anyhow::Context;
@@ -6,13 +12,6 @@ use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use tap::Tap;
 
-use crate::{
-    containers::{List, Symbol},
-    context::{Ctx, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
-    grammar::BinOp,
-};
-
-use super::{RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr};
 
 /// Parse a string as an entire program.
 pub fn parse_program(input: &str, source: ModuleId) -> CtxResult<Ctx<RawProgram>> {
@@ -277,7 +276,9 @@ struct RawParser;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::grammar::parse_program;
+    use crate::grammar::parser::ModuleId;
+
     use log::LevelFilter;
     #[test]
     fn test_parse() {
