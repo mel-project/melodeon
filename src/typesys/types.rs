@@ -230,17 +230,17 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         // this means the overlap is to the right,
                         Cow::Owned(Type::NatRange(
                             ax.clone(),
-                            bx.sub1().unwrap_or_else(|| bx.clone()),
+                            bx.try_subtract_one().unwrap_or_else(|| bx.clone()),
                         ))
                     } else if bx.leq(ax) {
                         // the overlap is to the left
-                        Cow::Owned(Type::NatRange(by.clone().add1(), ay.clone()))
+                        Cow::Owned(Type::NatRange(by.clone().try_add_one(), ay.clone()))
                     } else {
                         // punch a hole
                         Cow::Owned(Type::Union(
-                            Type::NatRange(ax.clone(), bx.sub1().unwrap_or_else(|| bx.clone()))
+                            Type::NatRange(ax.clone(), bx.try_subtract_one().unwrap_or_else(|| bx.clone()))
                                 .into(),
-                            Type::NatRange(by.add1(), ay.clone()).into(),
+                            Type::NatRange(by.try_add_one(), ay.clone()).into(),
                         ))
                     }
                 } else {
@@ -329,7 +329,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             }
             Type::Vectorof(t, n) => {
                 if let Some(idx) = idx {
-                    if idx.add1().leq(n) {
+                    if idx.try_add_one().leq(n) {
                         Some(Cow::Owned(t.as_ref().clone()))
                     } else {
                         None
@@ -693,13 +693,14 @@ impl<CVar: Variable> ConstExpr<CVar> {
     }
 
     /// Adds 1
-    pub fn add1(&self) -> Self {
+    pub fn try_add_one(&self) -> Self {
         ConstExpr::Plus(self.clone().into(), Arc::new(1.into()))
     }
 
     /// Subtract 1, if possible.
-    pub fn sub1(&self) -> Option<Self> {
+    pub fn try_subtract_one(&self) -> Option<Self> {
         let val = self.try_eval()?;
+        
         Some(ConstExpr::Literal(val.checked_sub(U256::from(1u8))?))
     }
 }
