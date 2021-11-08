@@ -7,10 +7,10 @@ use internment::Intern;
 /// TODO: replace with some good immutable vector
 pub type List<T> = Vec<T>;
 
-/// Set type
+/// This is a type alias over imbl's [HashSet](https://docs.rs/imbl/1.0.1/imbl/struct.HashSet.html)
 pub type Set<T> = imbl::HashSet<T>;
 
-/// Map type
+/// This is a type alias over imbl's HashMap [HashMap](https://docs.rs/imbl/1.0.1/imbl/struct.HashMap.html)
 pub type Map<K, V> = imbl::HashMap<K, V>;
 
 /// Interned string with O(1) equality and hashing.

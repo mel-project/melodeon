@@ -6,12 +6,9 @@ use crate::{
     containers::{Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::RawExpr,
-    typesys::{BinOp, ConstExpr, ExprInner, Type},
+    typesys::{BinOp, ConstExpr, Expr, ExprInner, Type, Variable},
+    typesys::typecheck::state::TypecheckState,
 };
-
-use self::state::TypecheckState;
-
-use super::{Expr, Variable};
 
 mod state;
 
@@ -147,8 +144,9 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
 mod tests {
     use ethnum::U256;
 
-    use super::*;
     use crate::{containers::Void, context::ModuleId, grammar::parse_program};
+    use crate::typesys::typecheck_expr;
+    use crate::typesys::typecheck::{Symbol, TypecheckState};
 
     #[test]
     fn typecheck_simple() {
