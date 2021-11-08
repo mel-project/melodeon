@@ -4,7 +4,7 @@ use anyhow::Context;
 
 use crate::{
     containers::{Symbol, Void},
-    context::{Ctx, CtxLocation, CtxResult, ToCtx, ToCtxErr},
+    context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::RawExpr,
     typesys::{BinOp, ConstExpr, ExprInner, Type},
 };
@@ -60,60 +60,66 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             let a = recurse(a)?;
             let b = recurse(b)?;
             let op = *op.deref();
-            if let crate::grammar::BinOp::Eq = op {
-                Ok(Expr {
-                    itype: Type::NatRange(0.into(), 1.into()),
-                    inner: ExprInner::BinOp(BinOp::Eq, a.into(), b.into()),
-                })
-            } else {
-                // both must be numbers
+            // both must be numbers
+            let check_nats = || {
                 assert_subtype(ctx, &a.itype, &Type::all_nat())?;
                 assert_subtype(ctx, &b.itype, &Type::all_nat())?;
                 let template: Type<Void, i32> =
                     Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
                 let a_range = template.unify_cvars(&a.itype).unwrap();
                 let b_range = template.unify_cvars(&b.itype).unwrap();
-                match op {
-                    crate::grammar::BinOp::Add => {
-                        // add the two ranges
-                        let lower_bound =
-                            ConstExpr::Plus(a_range[&0].clone().into(), b_range[&0].clone().into())
-                                .simplify();
-                        let upper_bound =
-                            ConstExpr::Plus(a_range[&1].clone().into(), b_range[&1].clone().into())
-                                .simplify();
-                        Ok(Expr {
-                            itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
-                            inner: ExprInner::BinOp(BinOp::Add, a.into(), b.into()),
-                        })
-                    }
-                    crate::grammar::BinOp::Sub => {
-                        // cannot subtract CGs correctly at the moment
-                        Ok(Expr {
-                            itype: Type::all_nat(),
-                            inner: ExprInner::BinOp(BinOp::Sub, a.into(), b.into()),
-                        })
-                    }
-                    crate::grammar::BinOp::Mul => {
-                        // add the two ranges
-                        let lower_bound =
-                            ConstExpr::Mult(a_range[&0].clone().into(), b_range[&0].clone().into())
-                                .simplify();
-                        let upper_bound =
-                            ConstExpr::Mult(a_range[&1].clone().into(), b_range[&1].clone().into())
-                                .simplify();
-                        Ok(Expr {
-                            itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
-                            inner: ExprInner::BinOp(BinOp::Mul, a.into(), b.into()),
-                        })
-                    }
-                    // cannot divide CGs correctly at the moment
-                    crate::grammar::BinOp::Div => Ok(Expr {
+                Ok::<_, CtxErr>((a_range, b_range))
+            };
+            match op {
+                crate::grammar::BinOp::Add => {
+                    let (a_range, b_range) = check_nats()?;
+                    // add the two ranges
+                    let lower_bound =
+                        ConstExpr::Plus(a_range[&0].clone().into(), b_range[&0].clone().into())
+                            .simplify();
+                    let upper_bound =
+                        ConstExpr::Plus(a_range[&1].clone().into(), b_range[&1].clone().into())
+                            .simplify();
+                    Ok(Expr {
+                        itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
+                        inner: ExprInner::BinOp(BinOp::Add, a.into(), b.into()),
+                    })
+                }
+                crate::grammar::BinOp::Sub => {
+                    check_nats()?;
+                    // cannot subtract CGs correctly at the moment
+                    Ok(Expr {
+                        itype: Type::all_nat(),
+                        inner: ExprInner::BinOp(BinOp::Sub, a.into(), b.into()),
+                    })
+                }
+                crate::grammar::BinOp::Mul => {
+                    let (a_range, b_range) = check_nats()?;
+                    // add the two ranges
+                    let lower_bound =
+                        ConstExpr::Mult(a_range[&0].clone().into(), b_range[&0].clone().into())
+                            .simplify();
+                    let upper_bound =
+                        ConstExpr::Mult(a_range[&1].clone().into(), b_range[&1].clone().into())
+                            .simplify();
+                    Ok(Expr {
+                        itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
+                        inner: ExprInner::BinOp(BinOp::Mul, a.into(), b.into()),
+                    })
+                }
+                // cannot divide CGs correctly at the moment
+                crate::grammar::BinOp::Div => {
+                    check_nats()?;
+                    Ok(Expr {
                         itype: Type::all_nat(),
                         inner: ExprInner::BinOp(BinOp::Div, a.into(), b.into()),
-                    }),
-                    crate::grammar::BinOp::Eq => unreachable!(),
+                    })
                 }
+                // don't check for nats
+                crate::grammar::BinOp::Eq => Ok(Expr {
+                    itype: Type::NatRange(0.into(), 1.into()),
+                    inner: ExprInner::BinOp(BinOp::Eq, a.into(), b.into()),
+                }),
             }
         }
         RawExpr::LitNum(num) => Ok(Expr {
