@@ -49,6 +49,10 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
 }
 
 impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
+    /// Convenience function that creates a NatRange covering all numbers
+    pub fn all_nat() -> Self {
+        Self::NatRange(0.into(), U256::MAX.into())
+    }
     /// Equivalence relation. Returns true iff `self` and `other` are subtypes of each other.
     pub fn equiv_to(&self, other: &Self) -> bool {
         self.subtype_of(other) && other.subtype_of(other)
@@ -610,7 +614,8 @@ impl<CVar: Variable> Debug for ConstExpr<CVar> {
 }
 
 impl<CVar: Variable> ConstExpr<CVar> {
-    fn leq(&self, other: &Self) -> bool {
+    /// Partial order relation
+    pub fn leq(&self, other: &Self) -> bool {
         // TODO: cool polynomial stuff
         self == other
             || self
@@ -650,6 +655,15 @@ impl<CVar: Variable> ConstExpr<CVar> {
                 a.try_fill_inner(mapping)?.into(),
                 b.try_fill_inner(mapping)?.into(),
             )),
+        }
+    }
+
+    /// Simplifies the const-expr to an equivalent form.
+    pub fn simplify(self) -> Self {
+        if let Some(num) = self.try_eval() {
+            Self::Literal(num)
+        } else {
+            self
         }
     }
 
