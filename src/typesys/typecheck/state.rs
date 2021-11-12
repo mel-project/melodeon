@@ -1,13 +1,16 @@
 use crate::{
     containers::{List, Map, Symbol},
-    typesys::{Type, Variable},
+    typesys::{ConstExpr, Type, Variable},
 };
+
+use super::facts::TypeFacts;
 
 /// A purely-functional typechecking state.
 #[derive(Debug, Clone, Default)]
 pub struct TypecheckState<TVar: Variable, CVar: Variable> {
     variable_scope: Map<Symbol, Type<TVar, CVar>>,
-    type_scope: Map<TVar, Type<TVar, CVar>>,
+    type_scope: Map<Symbol, Type<TVar, CVar>>,
+    cg_scope: Map<Symbol, ConstExpr<CVar>>,
     function_scope: Map<Symbol, FunctionType<TVar, CVar>>,
 }
 
@@ -17,6 +20,7 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
         Self {
             variable_scope: Map::new(),
             type_scope: Map::new(),
+            cg_scope: Map::new(),
             function_scope: Map::new(),
         }
     }
@@ -27,13 +31,14 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
         self
     }
 
+    /// Binds a const-generic variable.
+    pub fn bind_cgvar(mut self, s: Symbol, v: ConstExpr<CVar>) -> Self {
+        self.cg_scope.insert(s, v);
+        self
+    }
+
     /// Binds a type name
-    pub fn bind_type_alias(mut self, alias: TVar, t: Type<TVar, CVar>) -> Self {
-        // First, we resolve any aliases in t
-        let t = t.fill_tvars(|tv| {
-            self.lookup_type_alias(tv.clone())
-                .unwrap_or_else(|| Type::Var(tv.clone()))
-        });
+    pub fn bind_type_alias(mut self, alias: Symbol, t: Type<TVar, CVar>) -> Self {
         self.type_scope.insert(alias, t);
         self
     }
@@ -50,13 +55,28 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
     }
 
     /// Looks up a type alias
-    pub fn lookup_type_alias(&self, alias: TVar) -> Option<Type<TVar, CVar>> {
+    pub fn lookup_type_alias(&self, alias: Symbol) -> Option<Type<TVar, CVar>> {
         self.type_scope.get(&alias).cloned()
     }
 
     /// Looks up a function
     pub fn lookup_fun(&self, name: Symbol) -> Option<FunctionType<TVar, CVar>> {
         self.function_scope.get(&name).cloned()
+    }
+
+    /// Applies some type facts
+    pub fn with_facts(mut self, facts: &TypeFacts<TVar, CVar>) -> Self {
+        for (k, v) in facts.iter() {
+            if let Some(t) = self.variable_scope.get_mut(k) {
+                let new_t = if v.subtype_of(t) {
+                    v.clone()
+                } else {
+                    t.clone()
+                };
+                *t = new_t;
+            }
+        }
+        self
     }
 }
 

@@ -6,11 +6,22 @@ use tap::Tap;
 
 use crate::containers::{List, Map, Set, Symbol, Void};
 
-pub trait Variable: Clone + Hash + Eq + Debug {}
+use super::poly::Polynomial;
+
+pub trait Variable: Clone + Hash + Eq + Debug + Ord {
+    /// Possibly convert from a symbol. By default, just fails mercilessly.
+    fn try_from_sym(s: Symbol) -> Option<Self> {
+        None
+    }
+}
 
 impl Variable for Void {}
 
-impl Variable for Symbol {}
+impl Variable for Symbol {
+    fn try_from_sym(s: Symbol) -> Option<Self> {
+        Some(s)
+    }
+}
 
 /// A Melodeon type. [`Type`] is generic over two parameters, `TVar` and `CVar`, which represent the type for
 /// type-variables as well as the type for constant-generic variables.
@@ -21,7 +32,7 @@ impl Variable for Symbol {}
 /// type that cannot be constructed, so a value of [`Type<Void, Void>`] *statically* guarantees a lack of free variables.
 ///
 /// In general, typechecking code should not directly match against [`Type`]. Instead, use the subtyping and unification methods as needed.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     None,
     Any,
@@ -35,11 +46,14 @@ pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
 
 impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self == &Type::all_nat() {
+            return std::fmt::Display::fmt("Nat", f);
+        }
         match self {
             Type::None => std::fmt::Display::fmt("None", f),
             Type::Any => std::fmt::Display::fmt("Any", f),
             Type::Var(t) => t.fmt(f),
-            Type::NatRange(a, b) => std::fmt::Display::fmt(&format!("{{{:?}:{:?}}}", a, b), f),
+            Type::NatRange(a, b) => std::fmt::Display::fmt(&format!("{{{:?}..{:?}}}", a, b), f),
             Type::Vector(vec) => vec.fmt(f),
             Type::Vectorof(a, b) => std::fmt::Display::fmt(&format!("[{:?}; {:?}]", a, b), f),
             Type::Struct(s, v) => std::fmt::Display::fmt(&format!("!struct({}){:?}", s, v), f),
@@ -49,6 +63,11 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
 }
 
 impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
+    /// Checks whether this type is always "falsy".
+    pub fn always_falsy(&self) -> bool {
+        // that means it needs to be just zero.
+        self.subtype_of(&Type::NatRange(0.into(), 0.into()))
+    }
     /// Convenience function that creates a NatRange covering all numbers
     pub fn all_nat() -> Self {
         Self::NatRange(0.into(), U256::MAX.into())
@@ -302,17 +321,57 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     accum.insert(ax, bx);
                     accum.insert(ay, by);
                 }
+                (
+                    Type::NatRange(ax, ay),
+                    Type::NatRange(bx, by),
+                ) => {
+                    if let Some((bx, by)) = bx.try_eval().and_then(|bx| Some((bx, by.try_eval()?))) {
+                        // solve the polynomials
+                        let t  = Polynomial::from(&ax).solve(bx);
+                        if t.len() == 1 {
+                            accum.insert(ax.cvars()[0].clone(), t[0].into());
+                        }
+                        let t  = Polynomial::from(&ay).solve(by);
+                        if t.len() == 1 {
+                            accum.insert(ay.cvars()[0].clone(), t[0].into());
+                        }
+                    }
+                }
                 (Type::Vectorof(_, ConstExpr::Var(var)), Type::Vectorof(_, real)) => {
                     accum.insert(var, real);
+                },
+                (Type::Vectorof(_, var), Type::Vectorof(_, real)) => {
+                    if let Some(real) = real.try_eval() {
+                        let t = Polynomial::from(&var).solve(real);
+                        if t.len() == 1 {
+                            accum.insert(var.cvars()[0].clone(), t[0].into());
+                        }
+                    }
+                },
+                (Type::Vectorof(_, var), Type::Vector(v)) => {
+                    let solns = Polynomial::from(&var).solve((v.len() as u64).into());
+                    if solns.len() == 1 {
+                        accum.insert(var.cvars()[0].clone(), solns[0].into());
+                    }
                 }
-                (a, b) => log::warn!(
+                 (a, b) => log::warn!(
                     "does not yet support nontrivial const-generic variables (matching {:?} with {:?})",
                     a, b
                 ),
             }
         }
+        // 19:13 98.5
         Some(accum)
     }
+
+    // /// Unifies "into" a template
+    // pub fn unify_into(&self, template: &Self) -> Option<Self> {
+    //     let cvar_tab = template.unify_cvars(self)?;
+    //     let tvar_tab = template.unify_tvars(self)?;
+    //     template
+    //         .try_fill_cvars(|c| cvar_tab.get(c).cloned())?
+    //         .try_fill_tvars(|c| tvar_tab.get(c).cloned())
+    // }
 
     /// Indexes into this type. None indicates a generalized index.
     pub fn index(&self, idx: Option<&ConstExpr<CVar>>) -> Option<Cow<Self>> {
@@ -528,9 +587,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
     /// Fills in all const-generic variables. If the resolution fails at any step, returns [None].
     pub fn try_fill_cvars<NewCVar: Variable>(
         &self,
-        mapping: impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+        mut mapping: impl FnMut(&CVar) -> Option<ConstExpr<NewCVar>>,
     ) -> Option<Type<TVar, NewCVar>> {
-        self.try_fill_cvars_inner(&mapping)
+        self.try_fill_cvars_inner(&mut mapping)
     }
 
     /// Fills in all const-generic variables. But infallible.
@@ -543,7 +602,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
 
     fn try_fill_cvars_inner<NewCVar: Variable>(
         &self,
-        mapping: &impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+        mapping: &mut impl FnMut(&CVar) -> Option<ConstExpr<NewCVar>>,
     ) -> Option<Type<TVar, NewCVar>> {
         match self {
             Type::None => Some(Type::None),
@@ -629,35 +688,40 @@ impl<CVar: Variable> Debug for ConstExpr<CVar> {
 }
 
 impl<CVar: Variable> ConstExpr<CVar> {
+    /// Find all the cvars.
+    pub fn cvars(&self) -> List<CVar> {
+        let mut accum = List::new();
+        self.fill(|v| {
+            accum.push(v.clone());
+            Self::Var(v.clone())
+        });
+        accum
+    }
+
     /// Partial order relation
     pub fn leq(&self, other: &Self) -> bool {
-        // TODO: cool polynomial stuff
-        self == other
-            || self
-                .try_eval()
-                .and_then(|this| Some(this <= other.try_eval()?))
-                .unwrap_or(false)
+        self == other || Polynomial::from(self) <= Polynomial::from(other)
     }
 
     /// Fills in the free variables fallibly, given a mapping.
     pub fn try_fill<NewCVar: Variable>(
         &self,
-        mapping: impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+        mut mapping: impl FnMut(&CVar) -> Option<ConstExpr<NewCVar>>,
     ) -> Option<ConstExpr<NewCVar>> {
-        self.try_fill_inner(&mapping)
+        self.try_fill_inner(&mut mapping)
     }
 
     /// Fills in the free variables infallibly, given a mapping.
     pub fn fill<NewCVar: Variable>(
         &self,
-        mapping: impl Fn(&CVar) -> ConstExpr<NewCVar>,
+        mut mapping: impl FnMut(&CVar) -> ConstExpr<NewCVar>,
     ) -> ConstExpr<NewCVar> {
         self.try_fill(|a| Some(mapping(a))).unwrap()
     }
 
     fn try_fill_inner<NewCVar: Variable>(
         &self,
-        mapping: &impl Fn(&CVar) -> Option<ConstExpr<NewCVar>>,
+        mapping: &mut impl FnMut(&CVar) -> Option<ConstExpr<NewCVar>>,
     ) -> Option<ConstExpr<NewCVar>> {
         match self {
             ConstExpr::Literal(lit) => Some(ConstExpr::Literal(*lit)),
@@ -773,6 +837,27 @@ mod tests {
     }
 
     #[test]
+    fn tricky_unification() {
+        init_logs();
+        let r1: Type<Symbol, Symbol> = Type::Vectorof(
+            Type::Var(Symbol::from("T")).into(),
+            ConstExpr::Plus(
+                ConstExpr::Var(Symbol::from("n")).into(),
+                ConstExpr::Mult(
+                    ConstExpr::Var(Symbol::from("n")).into(),
+                    ConstExpr::Var(Symbol::from("n")).into(),
+                )
+                .into(),
+            ),
+        );
+        log::info!("before unification: {:?}", r1);
+        let r2: Type<Symbol, Void> =
+            Type::Vectorof(Type::Var(Symbol::from("T")).into(), 392614410.into());
+        let map = r1.unify_cvars(&r2);
+        log::info!("after unification: {:?}", map);
+    }
+
+    #[test]
     fn sub_hole_punching() {
         init_logs();
         let r1: Type = Type::NatRange(0.into(), 500.into());
@@ -793,6 +878,33 @@ mod tests {
             )));
     }
 
+    #[test]
+    fn constgen_subtyping() {
+        init_logs();
+        let r1: Type<Void, Symbol> = Type::NatRange(
+            ConstExpr::Plus(
+                ConstExpr::Var(Symbol::from("x")).into(),
+                ConstExpr::Var(Symbol::from("y")).into(),
+            ),
+            ConstExpr::Mult(
+                ConstExpr::Var(Symbol::from("y")).into(),
+                ConstExpr::Var(Symbol::from("x")).into(),
+            ),
+        );
+        let r2: Type<Void, Symbol> = Type::NatRange(
+            0.into(),
+            ConstExpr::Mult(
+                ConstExpr::Mult(
+                    ConstExpr::Var(Symbol::from("x")).into(),
+                    ConstExpr::Var(Symbol::from("y")).into(),
+                )
+                .into(),
+                ConstExpr::Var(Symbol::from("y")).into(),
+            ),
+        );
+        assert!(r1.subtype_of(&r2));
+    }
+
     fn init_logs() {
         let _ = env_logger::builder()
             .is_test(true)
@@ -801,3 +913,5 @@ mod tests {
             .try_init();
     }
 }
+
+// def get<T, $n>(vec: [T; $n + 1], idx: {0..$n}) : T = vec[idx]

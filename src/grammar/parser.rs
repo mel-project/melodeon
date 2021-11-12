@@ -135,6 +135,12 @@ fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
             RawTypeExpr::Vectorof(inner_type, length).with_ctx(ctx)
         }
         Rule::type_name => RawTypeExpr::Sym(Symbol::from(pair.as_str())).with_ctx(ctx),
+        Rule::type_natrange => {
+            let mut children = pair.into_inner();
+            let left = parse_const_expr(children.next().unwrap(), source);
+            let right = parse_const_expr(children.next().unwrap(), source);
+            RawTypeExpr::NatRange(left, right).with_ctx(ctx)
+        }
         _ => unreachable!(),
     }
 }
@@ -247,8 +253,14 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                     Rule::vector_update => {
                         let children: List<Ctx<RawExpr>> =
                             child.into_inner().map(|c| parse_expr(c, source)).collect();
-                        toret = RawExpr::VectorUpdate(children[0].clone(), children[1].clone())
-                            .with_ctx(ctx);
+                        toret =
+                            RawExpr::VectorUpdate(toret, children[0].clone(), children[1].clone())
+                                .with_ctx(ctx);
+                    }
+                    Rule::as_type => {
+                        let mut children = child.into_inner();
+                        let type_expr = parse_type_expr(children.next().unwrap(), source);
+                        toret = RawExpr::AsType(toret, type_expr).with_ctx(ctx);
                     }
                     _ => unreachable!(),
                 }
@@ -259,6 +271,20 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             RawExpr::LitNum(U256::from_str_radix(pair.as_str(), 10).unwrap()).with_ctx(ctx)
         }
         Rule::var_name => RawExpr::Var(Symbol::from(pair.as_str())).with_ctx(ctx),
+        Rule::is_type => {
+            let mut children = pair.into_inner();
+            let var_name = children.next().unwrap();
+            let type_expr = parse_type_expr(children.next().unwrap(), source);
+            RawExpr::IsType(Symbol::from(var_name.as_str()), type_expr).with_ctx(ctx)
+        }
+        Rule::vector_literal => {
+            let children = pair
+                .into_inner()
+                .into_iter()
+                .map(|c| parse_expr(c, source))
+                .collect();
+            RawExpr::LitVec(children).with_ctx(ctx)
+        }
         _ => unreachable!(),
     }
 }

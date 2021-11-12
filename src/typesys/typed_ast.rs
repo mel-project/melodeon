@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use ethnum::U256;
 
-use crate::containers::{List, Symbol, Void};
+use crate::containers::{List, Map, Symbol, Void};
 
-use super::{Type, Variable};
+use super::{ConstExpr, Type, Variable};
 
 #[derive(Debug, Clone)]
 pub struct Program {
@@ -15,7 +15,7 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub struct FunDefn<TVar: Variable = Void, CVar: Variable = Void> {
     pub name: Symbol,
-    pub args: List<(Symbol, Type<TVar, CVar>)>,
+    pub args: List<Symbol>,
     pub body: Expr<TVar, CVar>,
 }
 
@@ -34,9 +34,23 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
         Arc<Expr<TVar, CVar>>,
     ),
     Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
-    Apply(Arc<Expr<TVar, CVar>>, List<Arc<Expr<TVar, CVar>>>),
+    Apply(Symbol, List<Expr<TVar, CVar>>),
+    ApplyGeneric(
+        Symbol,
+        Map<TVar, Type<TVar, CVar>>,
+        Map<CVar, ConstExpr<CVar>>,
+        List<Expr<TVar, CVar>>,
+    ),
     LitNum(U256),
+    LitVec(List<Expr<TVar, CVar>>),
     Var(Symbol),
+    IsType(Symbol, Type<TVar, CVar>),
+    VectorRef(Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
+    VectorUpdate(
+        Arc<Expr<TVar, CVar>>,
+        Arc<Expr<TVar, CVar>>,
+        Arc<Expr<TVar, CVar>>,
+    ),
 }
 
 /// Binary operator

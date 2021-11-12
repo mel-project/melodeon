@@ -1,5 +1,5 @@
 // "lexer" items
-reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" }
+reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is"}
 nat_literal = @{ !reserved ~ ASCII_DIGIT+ }
 type_name   = @{ !reserved ~ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
 var_name    = @{ !reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
@@ -49,13 +49,15 @@ type_terminal = _{
     type_vector             |
     type_vectorof           |
     type_name               |
+    type_natrange           |
     "(" ~ type_expr ~ ")"  
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" } 
 type_vectorof = { "[" ~ type_expr ~ ";" ~ const_expr ~ "]" }
+type_natrange = { "{" ~ const_expr ~ ".." ~ const_expr ~ "}" }
 
 // const-expr. A precedence tower, similar to the bin-expr one.
-const_expr = _{
+const_expr = _{ 
     const_add_expr
 }
 const_add_expr = { const_mult_expr ~ (add ~ const_mult_expr)* }
@@ -89,17 +91,23 @@ rel_expr    = { add_expr ~ ((lor | land | equal | ge | geq | le | leq) ~ add_exp
 add_expr    = { mult_expr ~ ((add | sub) ~ mult_expr)* }
 mult_expr   = { apply_expr ~ ((mul | div) ~ apply_expr)* }
 apply_expr  = {
-    terminal_expr ~ (call_args | field_access | vector_ref | vector_update)*
+    terminal_expr ~ (call_args | field_access | vector_ref | vector_update | as_type)*
 }
 
 call_args       = { "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
 field_access    = { "." ~ var_name }
 vector_ref      = { "[" ~ expr ~ "]" }
 vector_update   = { "[" ~ expr ~ "=>" ~ expr ~ "]" }
+as_type         = { "as" ~ type_expr }
+
 
 terminal_expr   = _{
+    is_type |
+    cflow_expr |
     nat_literal |
     var_name |
-    cflow_expr |
+    vector_literal |
     "(" ~ expr ~ ")"
 }
+is_type     = { var_name ~ "is" ~ type_expr }
+vector_literal = { "[" ~ (expr ~ ",")* ~ expr ~ "]" }

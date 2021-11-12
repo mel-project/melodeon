@@ -14,7 +14,7 @@ pub type Set<T> = imbl::HashSet<T>;
 pub type Map<K, V> = imbl::HashMap<K, V>;
 
 /// Interned string with O(1) equality and hashing.
-#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Symbol(Intern<String>);
 
 impl Debug for Symbol {
@@ -36,5 +36,5 @@ impl From<&str> for Symbol {
 }
 
 /// A type that cannot have elements.
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug, PartialOrd, Ord)]
 pub enum Void {}
