@@ -737,9 +737,10 @@ mod tests {
             typecheck_program(
                 parse_program(
                     r"
-def succ<$n>(x: {$n..$n}): {$n+1..$n+1} = $n + 1
+def succ<$n>(x: {$n..$n}) = $n + 1
+def peel<$n>(x : {$n+1..$n+1}) = $n
 ---
-succ(0)
+peel(peel(succ(succ(succ(0)))))
                 ",
                     module
                 )
