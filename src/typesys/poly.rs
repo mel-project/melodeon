@@ -81,14 +81,14 @@ impl<CVar: Variable> Polynomial<CVar> {
             .sum()
     }
 
-    /// Checked subtraction.
-    pub fn checked_sub(mut self, rhs: Self) -> Option<Self> {
-        for (k, v) in rhs.terms {
-            let w = self.terms.entry(k).or_default();
-            *w = w.checked_sub(v)?;
-        }
-        Some(self)
-    }
+    // /// Checked subtraction.
+    // pub fn checked_sub(mut self, rhs: Self) -> Option<Self> {
+    //     for (k, v) in rhs.terms {
+    //         let w = self.terms.entry(k).or_default();
+    //         *w = w.checked_sub(v)?;
+    //     }
+    //     Some(self)
+    // }
 }
 
 /// factorize a number. currently just trial divisions.

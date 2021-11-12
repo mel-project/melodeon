@@ -1,3 +1,4 @@
+pub mod codegen;
 pub mod containers;
 pub mod context;
 pub mod grammar;

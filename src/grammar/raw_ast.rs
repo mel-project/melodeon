@@ -62,10 +62,12 @@ pub enum RawExpr {
     LitNum(U256),
     LitVec(List<Ctx<Self>>),
     Var(Symbol),
+    CgVar(Symbol),
 
     Apply(Ctx<Self>, List<Ctx<Self>>),
     Field(Ctx<Self>, Ctx<Symbol>),
     VectorRef(Ctx<Self>, Ctx<Self>),
+    VectorSlice(Ctx<Self>, Ctx<Self>, Ctx<Self>),
     VectorUpdate(Ctx<Self>, Ctx<Self>, Ctx<Self>),
 
     IsType(Symbol, Ctx<RawTypeExpr>),

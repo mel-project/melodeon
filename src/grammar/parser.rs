@@ -251,6 +251,17 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                         let index = child.into_inner().next().unwrap();
                         toret = RawExpr::VectorRef(toret, parse_expr(index, source)).with_ctx(ctx);
                     }
+                    Rule::vector_slice => {
+                        let mut cc = child.into_inner();
+                        let left_idx = cc.next().unwrap();
+                        let right_idx = cc.next().unwrap();
+                        toret = RawExpr::VectorSlice(
+                            toret,
+                            parse_expr(left_idx, source),
+                            parse_expr(right_idx, source),
+                        )
+                        .with_ctx(ctx);
+                    }
                     Rule::vector_update => {
                         let children: List<Ctx<RawExpr>> =
                             child.into_inner().map(|c| parse_expr(c, source)).collect();
@@ -286,6 +297,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .collect();
             RawExpr::LitVec(children).with_ctx(ctx)
         }
+        Rule::cgvar_name => RawExpr::CgVar(Symbol::from(pair.as_str())).with_ctx(ctx),
         _ => unreachable!(),
     }
 }

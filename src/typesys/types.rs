@@ -10,7 +10,7 @@ use super::poly::Polynomial;
 
 pub trait Variable: Clone + Hash + Eq + Debug + Ord {
     /// Possibly convert from a symbol. By default, just fails mercilessly.
-    fn try_from_sym(s: Symbol) -> Option<Self> {
+    fn try_from_sym(_: Symbol) -> Option<Self> {
         None
     }
 }
@@ -93,7 +93,10 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             }
             (Type::Var(_), _) => false,
             (_, Type::Var(_)) => false,
-            (Type::NatRange(ax, ay), Type::NatRange(bx, by)) => bx.leq(ax) && ay.leq(by),
+            (Type::NatRange(ax, ay), Type::NatRange(bx, by)) => {
+                (bx.try_eval() == Some(0u8.into()) && by.try_eval() == Some(U256::MAX))
+                    || (bx.leq(ax) && ay.leq(by))
+            }
             (Type::NatRange(a, b), Type::Union(t, u)) => {
                 // we only apply the union rule in two cases:
                 // - both sides of the range are the same number. This means that this is literally a single number. In this case, the union rule is actually precise: a single number being a subtype of T | U means that it must be a subtype of at least one of T or U.
@@ -154,7 +157,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 .unwrap_or(false),
             (Type::Vectorof(v1_all, v1_len), Type::Vectorof(v2_all, v2_len)) => {
                 // equal lengths
-                v1_len == v2_len && v1_all.subtype_of(v2_all)
+                v1_len.leq(v2_len) && v2_len.leq(v1_len) && v1_all.subtype_of(v2_all)
             }
             (Type::Vectorof(_, _), Type::Struct(_, _)) => false,
             (Type::Vectorof(v1_all, v1_len), Type::Union(t, u)) => {

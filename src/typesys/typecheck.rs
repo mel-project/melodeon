@@ -331,7 +331,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                             let actual_arg_type = arg.itype.clone();
                             arg_type.unify_cvars(&actual_arg_type).unwrap_or_default()
                         })
-                        .reduce(|a, b| a.union_with(b, |a, b| a))
+                        .reduce(|a, b| a.union_with(b, |a, _| a))
                         .unwrap_or_default();
                     for (arg, required_type) in typechecked_args.iter().zip(ftype.args.iter()) {
                         let required_type = required_type
@@ -458,6 +458,22 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 },
                 TypeFacts::empty(),
             ))
+        }
+        RawExpr::CgVar(cgv) => {
+            let maps_to = state
+                .lookup_cgvar(cgv)
+                .context(format!("undefined constant-generic variable {:?}", cgv))
+                .err_ctx(ctx)?;
+            Ok((
+                Expr {
+                    itype: Type::NatRange(maps_to.clone(), maps_to.clone()),
+                    inner: ExprInner::LitConst(maps_to),
+                },
+                TypeFacts::empty(),
+            ))
+        }
+        RawExpr::VectorSlice(v, l, r) => {
+            todo!()
         }
     }
 }
@@ -678,6 +694,9 @@ fn monomorphize_inner(
             ExprInner::VectorUpdate(v, i, n) => {
                 ExprInner::VectorUpdate(recurse(&v).into(), recurse(&i).into(), recurse(&n).into())
             }
+            ExprInner::LitConst(cexpr) => {
+                ExprInner::LitConst(cexpr.fill(|c| cvar_scope.get(c).cloned().unwrap()))
+            }
         },
         itype: body
             .itype
@@ -718,10 +737,9 @@ mod tests {
             typecheck_program(
                 parse_program(
                     r"
-def bar<$n, T>(x: [T; $n]) = x ++ [0]
-def foo<$n, T>(x: [T; $n]) = bar(x ++ x)
+def succ<$n>(x: {$n..$n}): {$n+1..$n+1} = $n + 1
 ---
-foo([1, 2, 3, 4, 5])[0]
+succ(0)
                 ",
                     module
                 )

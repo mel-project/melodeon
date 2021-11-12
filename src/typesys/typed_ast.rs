@@ -43,6 +43,7 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
     ),
     LitNum(U256),
     LitVec(List<Expr<TVar, CVar>>),
+    LitConst(ConstExpr<CVar>),
     Var(Symbol),
     IsType(Symbol, Type<TVar, CVar>),
     VectorRef(Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
