@@ -6,6 +6,7 @@ var_name    = @{ !reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
 cgvar_name  = @{ !reserved ~ "$" ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
 add         = {"+"}
 sub         = {"-"}
+append      = {"++"}
 mul         = {"*"}
 div         = {"/"}
 lor         = {"||"}
@@ -88,7 +89,7 @@ bin_expr = _{
 // Unlike in a CFG, in a PEG grammar, this is most naturally expressed as a rule with unbounded arity, rather than a binary rule.
 // This does require a bit of postprocessing (basically a fold) to turn into a binary form.
 rel_expr    = { add_expr ~ ((lor | land | equal | ge | geq | le | leq) ~ add_expr)*}
-add_expr    = { mult_expr ~ ((add | sub) ~ mult_expr)* }
+add_expr    = { mult_expr ~ ((append | add | sub) ~ mult_expr)* }
 mult_expr   = { apply_expr ~ ((mul | div) ~ apply_expr)* }
 apply_expr  = {
     terminal_expr ~ (call_args | field_access | vector_ref | vector_update | as_type)*
@@ -97,6 +98,7 @@ apply_expr  = {
 call_args       = { "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
 field_access    = { "." ~ var_name }
 vector_ref      = { "[" ~ expr ~ "]" }
+vector_slice    = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 vector_update   = { "[" ~ expr ~ "=>" ~ expr ~ "]" }
 as_type         = { "as" ~ type_expr }
 
@@ -107,7 +109,9 @@ terminal_expr   = _{
     nat_literal |
     var_name |
     vector_literal |
+    range_literal |
     "(" ~ expr ~ ")"
 }
 is_type     = { var_name ~ "is" ~ type_expr }
-vector_literal = { "[" ~ (expr ~ ",")* ~ expr ~ "]" }
+vector_literal = { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
+range_literal = {"[" ~ expr ~ ".." ~ expr ~ "]"}

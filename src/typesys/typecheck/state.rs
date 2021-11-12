@@ -54,6 +54,11 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
         self.variable_scope.get(&s).cloned()
     }
 
+    /// Looks up a bound const-generic variable
+    pub fn lookup_cgvar(&self, s: Symbol) -> Option<ConstExpr<CVar>> {
+        self.cg_scope.get(&s).cloned()
+    }
+
     /// Looks up a type alias
     pub fn lookup_type_alias(&self, alias: Symbol) -> Option<Type<TVar, CVar>> {
         self.type_scope.get(&alias).cloned()

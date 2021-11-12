@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
 use dashmap::DashMap;
@@ -19,13 +19,25 @@ use super::{Expr, Program, Variable};
 mod facts;
 mod state;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TypeParam(Symbol);
+
+impl Debug for TypeParam {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl Variable for TypeParam {}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CgParam(Symbol);
+
+impl Debug for CgParam {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl Variable for CgParam {}
 
@@ -242,6 +254,23 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     },
                     TypeFacts::empty(),
                 )),
+                crate::grammar::BinOp::Append => {
+                    // vector append
+                    Ok((
+                        Expr {
+                            itype: a
+                                .itype
+                                .append(&b.itype)
+                                .context(format!(
+                                    "cannot append values of types {:?} and {:?}",
+                                    a.itype, b.itype
+                                ))
+                                .err_ctx(ctx)?,
+                            inner: ExprInner::BinOp(BinOp::Append, a.into(), b.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
             }
         }
         RawExpr::LitNum(num) => Ok((
@@ -440,7 +469,7 @@ fn type_vector_ref<Tv: Variable, Cv: Variable>(
     // first, we unify the vector to [Any; n] in order to get the length
     let v_length =
         Type::<Void, Symbol>::Vectorof(Type::Any.into(), ConstExpr::Var(Symbol::from("n")))
-            .unify_cvars(&vtype)
+            .unify_cvars(vtype)
             .and_then(|h| h.get(&Symbol::from("n")).cloned())
             .context(format!("type {:?} cannot be indexed into", vtype))?;
     log::trace!("indexing into vector of length {:?}", v_length);
@@ -449,7 +478,7 @@ fn type_vector_ref<Tv: Variable, Cv: Variable>(
         ConstExpr::Var(Symbol::from("a")),
         ConstExpr::Var(Symbol::from("b")),
     )
-    .unify_cvars(&itype)
+    .unify_cvars(itype)
     .unwrap_or_default();
     let i_lower_bound = i_params.get(&Symbol::from("a")).cloned().context(format!(
         "vector index of type {:?} has no lower bound",
@@ -518,9 +547,10 @@ fn typecheck_const_expr<Tv: Variable, Cv: Variable>(
     raw: Ctx<RawConstExpr>,
 ) -> CtxResult<ConstExpr<Cv>> {
     match raw.deref() {
-        RawConstExpr::Sym(s) => Ok(ConstExpr::Var(
-            Cv::try_from_sym(*s).context("oh no").err_ctx(raw.ctx())?,
-        )),
+        RawConstExpr::Sym(s) => Ok(state
+            .lookup_cgvar(*s)
+            .context("no cgvar")
+            .err_ctx(raw.ctx())?),
         RawConstExpr::Lit(a) => Ok(ConstExpr::Literal(*a)),
         RawConstExpr::Plus(a, b) => Ok(ConstExpr::Plus(
             typecheck_const_expr(state, a.clone())?.into(),
@@ -688,10 +718,10 @@ mod tests {
             typecheck_program(
                 parse_program(
                     r"
-                def foo(bar: Nat) = bar
-                def id<T>(x: T) = x
-                ---
-                [id(foo(1)), id([1, 2,3])][1][2]
+def bar<$n, T>(x: [T; $n]) = x ++ [0]
+def foo<$n, T>(x: [T; $n]) = bar(x ++ x)
+---
+foo([1, 2, 3, 4, 5])[0]
                 ",
                     module
                 )

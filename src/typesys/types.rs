@@ -408,6 +408,32 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         }
     }
 
+    /// Append this vector type to another vector type. Returns None if the two types cannot be appended.
+    pub fn append(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Type::Union(t, u), v) => Some(Type::Union(t.append(v)?.into(), u.append(v)?.into())),
+            (v, Type::Union(t, u)) => Some(Type::Union(v.append(t)?.into(), u.append(t)?.into())),
+            (Type::Vector(v1), Type::Vector(v2)) => Some(Type::Vector(
+                v1.iter().cloned().chain(v2.iter().cloned()).collect(),
+            )),
+            (Type::Vector(v1), Type::Vectorof(t, n)) => Some(Type::Vectorof(
+                t.smart_union(&v1.iter().fold(Type::None, |a, b| a.smart_union(b)))
+                    .into(),
+                ConstExpr::Plus(n.clone().into(), Arc::new(v1.len().into())),
+            )),
+            (Type::Vectorof(t, n), Type::Vector(v)) => Some(Type::Vectorof(
+                t.smart_union(&v.iter().fold(Type::None, |a, b| a.smart_union(b)))
+                    .into(),
+                ConstExpr::Plus(n.clone().into(), Arc::new(v.len().into())),
+            )),
+            (Type::Vectorof(t1, n1), Type::Vectorof(t2, n2)) => Some(Type::Vectorof(
+                t1.smart_union(t2).into(),
+                ConstExpr::Plus(n1.clone().into(), n2.clone().into()),
+            )),
+            _ => None,
+        }
+    }
+
     /// Helper function that indexes into an iterator of locations.
     pub fn index_iterated(
         &self,

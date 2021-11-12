@@ -80,5 +80,7 @@ pub enum BinOp {
     Mul,
     Div,
 
+    Append,
+
     Eq,
 }
