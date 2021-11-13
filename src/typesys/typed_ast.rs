@@ -52,6 +52,11 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
         Arc<Expr<TVar, CVar>>,
         Arc<Expr<TVar, CVar>>,
     ),
+    VectorSlice(
+        Arc<Expr<TVar, CVar>>,
+        Arc<Expr<TVar, CVar>>,
+        Arc<Expr<TVar, CVar>>,
+    ),
 }
 
 /// Binary operator

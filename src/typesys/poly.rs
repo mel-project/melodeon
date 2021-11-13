@@ -3,6 +3,7 @@ use std::{
     collections::BTreeMap,
     fmt::Debug,
     ops::{Add, Mul},
+    sync::Arc,
 };
 
 use ethnum::U256;
@@ -86,14 +87,14 @@ impl<CVar: Variable> Polynomial<CVar> {
             .sum()
     }
 
-    // /// Checked subtraction.
-    // pub fn checked_sub(mut self, rhs: Self) -> Option<Self> {
-    //     for (k, v) in rhs.terms {
-    //         let w = self.terms.entry(k).or_default();
-    //         *w = w.checked_sub(v)?;
-    //     }
-    //     Some(self)
-    // }
+    /// Checked subtraction.
+    pub fn checked_sub(mut self, rhs: Self) -> Option<Self> {
+        for (k, v) in rhs.terms {
+            let w = self.terms.entry(k).or_default();
+            *w = w.checked_sub(v)?;
+        }
+        Some(self)
+    }
 }
 
 /// factorize a number. currently just trial divisions.
@@ -131,6 +132,35 @@ impl<CVar: Variable> From<&ConstExpr<CVar>> for Polynomial<CVar> {
             ConstExpr::Mult(a, b) => Self::from(a.as_ref()) * Self::from(b.as_ref()),
         }
         .tap_mut(|s| s.terms.retain(|_, v| v > &mut U256::from(0u8)))
+    }
+}
+
+impl<CVar: Variable> Into<ConstExpr<CVar>> for Polynomial<CVar> {
+    fn into(self) -> ConstExpr<CVar> {
+        self.terms
+            .into_iter()
+            .fold(ConstExpr::from(0), |a, (b, coeff)| {
+                ConstExpr::Plus(
+                    a.into(),
+                    ConstExpr::Mult(
+                        Arc::new(coeff.into()),
+                        b.into_iter()
+                            .fold(ConstExpr::from(1), |a, b| {
+                                ConstExpr::Mult(
+                                    a.into(),
+                                    std::iter::repeat(b.0)
+                                        .take(b.1)
+                                        .fold(ConstExpr::from(1), |a, b| {
+                                            ConstExpr::Mult(a.into(), ConstExpr::Var(b).into())
+                                        })
+                                        .into(),
+                                )
+                            })
+                            .into(),
+                    )
+                    .into(),
+                )
+            })
     }
 }
 

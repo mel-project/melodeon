@@ -801,6 +801,13 @@ impl<CVar: Variable> ConstExpr<CVar> {
         let val = self.try_eval()?;
         Some(ConstExpr::Literal(val.checked_sub(U256::from(1u8))?))
     }
+
+    /// Tries to subtract another const-expression.
+    pub fn checked_sub(&self, other: &Self) -> Option<Self> {
+        let my_poly = Polynomial::from(self);
+        let their_poly = Polynomial::from(other);
+        Some(my_poly.checked_sub(their_poly)?.into())
+    }
 }
 
 impl ConstExpr<Void> {

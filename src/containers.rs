@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    sync::atomic::{AtomicBool, AtomicU64},
+};
 
 use internment::Intern;
 
@@ -32,6 +35,21 @@ impl Display for Symbol {
 impl From<&str> for Symbol {
     fn from(s: &str) -> Self {
         Symbol(Intern::from(s))
+    }
+}
+
+impl Symbol {
+    /// Gensym.
+    pub fn generate(prefix: &str) -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        Symbol::from(
+            format!(
+                "{}{}",
+                prefix,
+                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            )
+            .as_str(),
+        )
     }
 }
 

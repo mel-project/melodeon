@@ -1,6 +1,9 @@
 use std::ops::Deref;
 
-use crate::typesys::{BinOp, Expr, ExprInner, FunDefn, Program, Type};
+use crate::{
+    containers::Symbol,
+    typesys::{BinOp, Expr, ExprInner, FunDefn, Program, Type},
+};
 use ethnum::U256;
 use lexpr::Value;
 
@@ -32,15 +35,30 @@ fn codegen_fundef(fdef: &FunDefn) -> Value {
 
 fn codegen_expr(expr: &Expr) -> Value {
     match &expr.inner {
-        ExprInner::BinOp(BinOp::Eq, x, y) => generate_eq_check(
-            if x.itype.subtype_of(&y.itype) {
-                &y.itype
-            } else {
-                &x.itype
-            },
-            codegen_expr(x),
-            codegen_expr(y),
-        ),
+        ExprInner::BinOp(BinOp::Eq, x, y) => {
+            let x_temp = Symbol::generate("-if");
+            let y_temp = Symbol::generate("-if");
+            [
+                Value::symbol("let"),
+                [
+                    Value::symbol(x_temp.to_string()),
+                    codegen_expr(x),
+                    Value::symbol(y_temp.to_string()),
+                    codegen_expr(y),
+                ]
+                .sexpr(),
+                generate_eq_check(
+                    if x.itype.subtype_of(&y.itype) {
+                        &y.itype
+                    } else {
+                        &x.itype
+                    },
+                    Value::symbol(x_temp.to_string()),
+                    Value::symbol(y_temp.to_string()),
+                ),
+            ]
+            .sexpr()
+        }
         ExprInner::BinOp(op, x, y) => {
             let x = codegen_expr(x);
             let y = codegen_expr(y);
@@ -89,6 +107,13 @@ fn codegen_expr(expr: &Expr) -> Value {
             codegen_expr(v),
             codegen_expr(i),
             codegen_expr(n),
+        ]
+        .sexpr(),
+        ExprInner::VectorSlice(v, i, j) => [
+            Value::symbol("v-slice"),
+            codegen_expr(v),
+            codegen_expr(i),
+            codegen_expr(j),
         ]
         .sexpr(),
     }
@@ -273,8 +298,9 @@ mod tests {
                     parse_program(
                         r"
 def double<$n, T>(v: [T; $n]) = v ++ v
+def tail<$n, T>(v: [T; $n + 1]) = v[1..$n+1]
 ---
-double(double(double([1])))
+tail([1, 2, 3, 4, 5, 6, 7]) as [Nat; 6]
                 ",
                         module
                     )

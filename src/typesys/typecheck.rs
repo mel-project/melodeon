@@ -500,7 +500,70 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             ))
         }
         RawExpr::VectorSlice(v, l, r) => {
-            todo!()
+            // TODO: producing vectors with uncertain lengths
+            // TODO: special-case when v is a written-out vector and l and r are both constants
+            let v = recurse(v)?.0;
+            let v_length =
+                Type::<Void, Symbol>::Vectorof(Type::Any.into(), ConstExpr::Var(Symbol::from("n")))
+                    .unify_cvars(&v.itype)
+                    .and_then(|h| h.get(&Symbol::from("n")).cloned())
+                    .context(format!("type {:?} cannot be sliced into", &v.itype))?;
+            let l = recurse(l)?.0;
+            let r = recurse(r)?.0;
+            let l_num = Type::NatRange::<Void, Symbol>(
+                ConstExpr::Var(Symbol::from("a")),
+                ConstExpr::Var(Symbol::from("a")),
+            )
+            .unify_cvars(&l.itype)
+            .and_then(|h| h.get(&Symbol::from("a")).cloned());
+            let r_num = Type::NatRange::<Void, Symbol>(
+                ConstExpr::Var(Symbol::from("a")),
+                ConstExpr::Var(Symbol::from("a")),
+            )
+            .unify_cvars(&r.itype)
+            .and_then(|h| h.get(&Symbol::from("a")).cloned());
+            if let (Some(l_num), Some(r_num)) = (l_num, r_num) {
+                if !l_num.leq(&r_num) {
+                    Err(anyhow::anyhow!(
+                        "left bound of vector slice {:?} is bigger than right bound {:?}",
+                        l_num,
+                        r_num
+                    )
+                    .with_ctx(ctx))
+                } else if !r_num.leq(&v_length) {
+                    Err(anyhow::anyhow!(
+                        "right bound of vector slice {:?} is too big for vector of length {:?}",
+                        r_num,
+                        v_length
+                    )
+                    .with_ctx(ctx))
+                } else {
+                    let new_length = r_num
+                        .checked_sub(&l_num)
+                        .context(format!(
+                            "cannot subtract {:?} - {:?} to compute length of sliced vector",
+                            r_num, l_num
+                        ))
+                        .err_ctx(ctx)?;
+                    Ok((
+                        Expr {
+                            itype: Type::Vectorof(
+                                v.itype.index(None).unwrap().into_owned().into(),
+                                new_length,
+                            ),
+                            inner: ExprInner::VectorSlice(v.into(), l.into(), r.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+            } else {
+                Err(anyhow::anyhow!(
+                    "cannot resolve slice indices (of types {:?} and {:?}) to single numbers",
+                    l.itype,
+                    r.itype
+                )
+                .with_ctx(ctx))
+            }
         }
     }
 }
@@ -729,6 +792,9 @@ fn monomorphize_inner(
                     .try_eval()
                     .unwrap(),
             ),
+            ExprInner::VectorSlice(v, i, j) => {
+                ExprInner::VectorSlice(recurse(&v).into(), recurse(&i).into(), recurse(&j).into())
+            }
         },
         itype: body
             .itype
