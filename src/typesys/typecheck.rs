@@ -338,8 +338,9 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                             .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())
                             .and_then(|t| t.try_fill_cvars(|cv| cg_mapping.get(cv).cloned()))
                             .context(format!(
-                                "cannot fill type variables in argument type {:?}",
-                                required_type
+                                "cannot fill type variables in argument type {:?}, given concrete {:?}",
+                                required_type,
+                                arg.itype
                             ))
                             .err_ctx(ctx)?;
                         if !arg.itype.subtype_of(&required_type) {
@@ -740,7 +741,7 @@ mod tests {
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x : {$n+1..$n+1}) = $n
 ---
-peel(peel(succ(succ(succ(0)))))
+peel(peel(succ(0)))
                 ",
                     module
                 )

@@ -54,6 +54,7 @@ impl<CVar: Variable> Polynomial<CVar> {
                 .copied()
                 .map(|p| qq.iter().copied().map(move |q| (p, q)))
                 .flatten()
+                .chain(std::iter::once((0u8.into(), 1u8.into())))
                 .filter_map(|(p, q)| {
                     let r = p / q;
                     if p % q != 0 {
