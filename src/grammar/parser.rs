@@ -138,7 +138,10 @@ fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
         Rule::type_natrange => {
             let mut children = pair.into_inner();
             let left = parse_const_expr(children.next().unwrap(), source);
-            let right = parse_const_expr(children.next().unwrap(), source);
+            let right = children
+                .next()
+                .map(|c| parse_const_expr(c, source))
+                .unwrap_or_else(|| left.clone());
             RawTypeExpr::NatRange(left, right).with_ctx(ctx)
         }
         _ => unreachable!(),

@@ -27,6 +27,10 @@ impl<CVar: Variable> Polynomial<CVar> {
 
     /// Finds all integers that when plugged into the polynomial, produce rhs.
     pub fn solve(&self, rhs: U256) -> List<U256> {
+        if rhs > U256::from(u16::MAX) {
+            log::warn!("cannot solve polynomials at huge values yet");
+            return List::new();
+        }
         log::trace!("solving {:?} = {}", self, rhs);
         if self.terms.keys().any(|b| b.len() > 1) || !self.terms.keys().any(|b| b.len() == 1) {
             log::trace!("cannot solve multivariate polynomial");

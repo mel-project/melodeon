@@ -53,7 +53,13 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
             Type::None => std::fmt::Display::fmt("None", f),
             Type::Any => std::fmt::Display::fmt("Any", f),
             Type::Var(t) => t.fmt(f),
-            Type::NatRange(a, b) => std::fmt::Display::fmt(&format!("{{{:?}..{:?}}}", a, b), f),
+            Type::NatRange(a, b) => {
+                if a == b {
+                    std::fmt::Display::fmt(&format!("{{{:?}}}", a), f)
+                } else {
+                    std::fmt::Display::fmt(&format!("{{{:?}..{:?}}}", a, b), f)
+                }
+            }
             Type::Vector(vec) => vec.fmt(f),
             Type::Vectorof(a, b) => std::fmt::Display::fmt(&format!("[{:?}; {:?}]", a, b), f),
             Type::Struct(s, v) => std::fmt::Display::fmt(&format!("!struct({}){:?}", s, v), f),

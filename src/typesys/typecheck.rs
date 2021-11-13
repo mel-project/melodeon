@@ -695,9 +695,12 @@ fn monomorphize_inner(
             ExprInner::VectorUpdate(v, i, n) => {
                 ExprInner::VectorUpdate(recurse(&v).into(), recurse(&i).into(), recurse(&n).into())
             }
-            ExprInner::LitConst(cexpr) => {
-                ExprInner::LitConst(cexpr.fill(|c| cvar_scope.get(c).cloned().unwrap()))
-            }
+            ExprInner::LitConst(cexpr) => ExprInner::LitNum(
+                cexpr
+                    .fill(|c| cvar_scope.get(c).cloned().unwrap())
+                    .try_eval()
+                    .unwrap(),
+            ),
         },
         itype: body
             .itype
@@ -741,7 +744,7 @@ mod tests {
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x : {$n+1..$n+1}) = $n
 ---
-peel(peel(succ(0)))
+peel(peel(succ(succ(0))))
                 ",
                     module
                 )

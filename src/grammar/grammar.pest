@@ -55,7 +55,7 @@ type_terminal = _{
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" } 
 type_vectorof = { "[" ~ type_expr ~ ";" ~ const_expr ~ "]" }
-type_natrange = { "{" ~ const_expr ~ ".." ~ const_expr ~ "}" }
+type_natrange = { "{" ~ const_expr ~ (".." ~ const_expr)? ~ "}" }
 
 // const-expr. A precedence tower, similar to the bin-expr one.
 const_expr = _{ 
