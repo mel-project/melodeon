@@ -820,7 +820,7 @@ mod tests {
             "{:#?}",
             typecheck_expr(
                 state,
-                parse_program("1 as Noonoo", module).unwrap().body.clone()
+                parse_program("1 as Nat", module).unwrap().body.clone()
             )
             .unwrap()
         );

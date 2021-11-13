@@ -927,33 +927,6 @@ mod tests {
             )));
     }
 
-    #[test]
-    fn constgen_subtyping() {
-        init_logs();
-        let r1: Type<Void, Symbol> = Type::NatRange(
-            ConstExpr::Plus(
-                ConstExpr::Var(Symbol::from("x")).into(),
-                ConstExpr::Var(Symbol::from("y")).into(),
-            ),
-            ConstExpr::Mult(
-                ConstExpr::Var(Symbol::from("y")).into(),
-                ConstExpr::Var(Symbol::from("x")).into(),
-            ),
-        );
-        let r2: Type<Void, Symbol> = Type::NatRange(
-            0.into(),
-            ConstExpr::Mult(
-                ConstExpr::Mult(
-                    ConstExpr::Var(Symbol::from("x")).into(),
-                    ConstExpr::Var(Symbol::from("y")).into(),
-                )
-                .into(),
-                ConstExpr::Var(Symbol::from("y")).into(),
-            ),
-        );
-        assert!(r1.subtype_of(&r2));
-    }
-
     fn init_logs() {
         let _ = env_logger::builder()
             .is_test(true)
