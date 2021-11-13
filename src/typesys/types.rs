@@ -803,6 +803,13 @@ impl<CVar: Variable> ConstExpr<CVar> {
     }
 }
 
+impl ConstExpr<Void> {
+    /// Reduces the const-expr down to a single number. Always possible for unparameterized cexprs.
+    pub fn eval(&self) -> U256 {
+        self.try_eval().unwrap()
+    }
+}
+
 impl<CVar: Variable> From<i32> for ConstExpr<CVar> {
     fn from(i: i32) -> Self {
         ConstExpr::Literal((i as u64).into())

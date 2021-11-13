@@ -2,7 +2,6 @@ use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
 use dashmap::DashMap;
-use ethnum::U256;
 use tap::Tap;
 
 use crate::{
@@ -247,13 +246,24 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     ))
                 }
                 // don't check for nats
-                crate::grammar::BinOp::Eq => Ok((
-                    Expr {
-                        itype: Type::NatRange(0.into(), 1.into()),
-                        inner: ExprInner::BinOp(BinOp::Eq, a.into(), b.into()),
-                    },
-                    TypeFacts::empty(),
-                )),
+                crate::grammar::BinOp::Eq => {
+                    if !a.itype.equiv_to(&b.itype) {
+                        Err(anyhow::anyhow!(
+                            "cannot compare equality for incomparable types {:?} and {:?}",
+                            a.itype,
+                            b.itype
+                        )
+                        .with_ctx(ctx))
+                    } else {
+                        Ok((
+                            Expr {
+                                itype: Type::NatRange(0.into(), 1.into()),
+                                inner: ExprInner::BinOp(BinOp::Eq, a.into(), b.into()),
+                            },
+                            TypeFacts::empty(),
+                        ))
+                    }
+                }
                 crate::grammar::BinOp::Append => {
                     // vector append
                     Ok((
@@ -528,7 +538,9 @@ fn typecheck_type_expr<Tv: Variable, Cv: Variable>(
     match raw.deref().clone() {
         RawTypeExpr::Sym(s) => {
             if s == Symbol::from("Nat") {
-                Ok(Type::NatRange(0.into(), U256::MAX.into()))
+                Ok(Type::all_nat())
+            } else if s == Symbol::from("Any") {
+                Ok(Type::Any)
             } else {
                 state
                     .lookup_type_alias(s)

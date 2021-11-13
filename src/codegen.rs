@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::typesys::{BinOp, Expr, ExprInner, FunDefn, Program, Type};
 use ethnum::U256;
 use lexpr::Value;
@@ -31,6 +33,9 @@ fn codegen_fundef(fdef: &FunDefn) -> Value {
 fn codegen_expr(expr: &Expr) -> Value {
     let itype = expr.itype.clone();
     match &expr.inner {
+        ExprInner::BinOp(BinOp::Eq, x, y) => {
+            generate_eq_check(&x.itype, codegen_expr(x), codegen_expr(y))
+        }
         ExprInner::BinOp(op, x, y) => {
             let x = codegen_expr(x);
             let y = codegen_expr(y);
@@ -39,8 +44,8 @@ fn codegen_expr(expr: &Expr) -> Value {
                 BinOp::Sub => Value::symbol("-"),
                 BinOp::Mul => Value::symbol("*"),
                 BinOp::Div => Value::symbol("/"),
-                BinOp::Append => Value::symbol("vappend"),
-                BinOp::Eq => todo!(),
+                BinOp::Append => Value::symbol("v-concat"),
+                BinOp::Eq => unreachable!(),
             };
             [op, x, y].sexpr()
         }
@@ -63,35 +68,155 @@ fn codegen_expr(expr: &Expr) -> Value {
         ExprInner::ApplyGeneric(_, _, _, _) => todo!(),
         ExprInner::LitNum(num) => {
             // lexpr does not support u64, so we desugar to smaller numbers
-            if num > &U256::from(u64::MAX) {
-                let divisor = U256::from(1u64 << 32);
-                let inner = codegen_expr(&Expr {
-                    itype: Type::Any,
-                    inner: ExprInner::LitNum(*num / divisor),
-                });
-                [
-                    Value::symbol("+"),
-                    Value::Number((num % divisor).as_u64().into()),
-                    [
-                        Value::symbol("*"),
-                        Value::Number(divisor.as_u64().into()),
-                        inner,
-                    ]
-                    .sexpr(),
-                ]
-                .sexpr()
-            } else {
-                Value::Number(num.as_u64().into())
-            }
+            u256_to_sexpr(*num)
         }
         ExprInner::LitVec(vec) => {
             Value::vector(vec.iter().map(|i| codegen_expr(i)).collect::<Vec<_>>())
         }
-        ExprInner::LitConst(_) => todo!(),
+        ExprInner::LitConst(_) => unreachable!(),
         ExprInner::Var(v) => Value::symbol(v.to_string()),
         ExprInner::IsType(_, _) => todo!(),
-        ExprInner::VectorRef(_, _) => todo!(),
-        ExprInner::VectorUpdate(_, _, _) => todo!(),
+        ExprInner::VectorRef(v, i) => {
+            [Value::symbol("v-get"), codegen_expr(v), codegen_expr(i)].sexpr()
+        }
+        ExprInner::VectorUpdate(v, i, n) => [
+            Value::symbol("v-from"),
+            codegen_expr(v),
+            codegen_expr(i),
+            codegen_expr(n),
+        ]
+        .sexpr(),
+    }
+}
+
+fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
+    match t {
+        Type::None => Value::Bool(true),
+        Type::Any => Value::Bool(false),
+        Type::Var(_) => unreachable!(),
+        Type::NatRange(_, _) => [Value::symbol("="), left_expr, right_expr].sexpr(),
+        Type::Vector(v) => v
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                generate_eq_check(
+                    t,
+                    [
+                        Value::symbol("v-get"),
+                        left_expr.clone(),
+                        Value::Number((i as u64).into()),
+                    ]
+                    .sexpr(),
+                    [
+                        Value::symbol("v-get"),
+                        right_expr.clone(),
+                        Value::Number((i as u64).into()),
+                    ]
+                    .sexpr(),
+                )
+            })
+            .fold(Value::Bool(true), |a, b| {
+                [Value::symbol("and"), a, b].sexpr()
+            }),
+        Type::Vectorof(t, n) => generate_eq_check(
+            &Type::Vector(
+                std::iter::repeat(t.deref().clone())
+                    .take(n.eval().as_usize())
+                    .collect(),
+            ),
+            left_expr,
+            right_expr,
+        ),
+        Type::Struct(_, _) => todo!(),
+        Type::Union(t, u) => {
+            let both_t = [
+                Value::symbol("and"),
+                generate_type_check(t, left_expr.clone()),
+                generate_type_check(t, right_expr.clone()),
+            ]
+            .sexpr();
+            let both_u = [
+                Value::symbol("and"),
+                generate_type_check(u, left_expr.clone()),
+                generate_type_check(u, right_expr.clone()),
+            ]
+            .sexpr();
+            [
+                Value::symbol("or"),
+                [
+                    Value::symbol("and"),
+                    both_t,
+                    generate_eq_check(t, left_expr.clone(), right_expr.clone()),
+                ]
+                .sexpr(),
+                [
+                    Value::symbol("and"),
+                    both_u,
+                    generate_eq_check(t, left_expr.clone(), right_expr.clone()),
+                ]
+                .sexpr(),
+            ]
+            .sexpr()
+        }
+    }
+}
+
+fn u256_to_sexpr(num: U256) -> Value {
+    // lexpr does not support u64, so we desugar to smaller numbers
+    if num > U256::from(u64::MAX) {
+        let divisor = U256::from(1u64 << 32);
+        let inner = codegen_expr(&Expr {
+            itype: Type::Any,
+            inner: ExprInner::LitNum(num / divisor),
+        });
+        [
+            Value::symbol("+"),
+            Value::Number((num % divisor).as_u64().into()),
+            [
+                Value::symbol("*"),
+                Value::Number(divisor.as_u64().into()),
+                inner,
+            ]
+            .sexpr(),
+        ]
+        .sexpr()
+    } else {
+        Value::Number(num.as_u64().into())
+    }
+}
+
+fn generate_type_check(t: &Type, inner: Value) -> Value {
+    match t {
+        Type::None => Value::Bool(false),
+        Type::Any => Value::Bool(true),
+        Type::Var(_) => unreachable!(),
+        Type::NatRange(a, b) => {
+            let is_number_expr = [
+                Value::symbol("="),
+                Value::Number(0.into()),
+                [Value::symbol("typeof"), inner.clone()].sexpr(),
+            ]
+            .sexpr();
+            if a.eval() == U256::MIN && b.eval() == U256::MAX {
+                is_number_expr
+            } else {
+                [
+                    Value::symbol("and"),
+                    is_number_expr,
+                    [
+                        Value::symbol("and"),
+                        [Value::symbol(">="), inner.clone(), u256_to_sexpr(a.eval())].sexpr(),
+                        [Value::symbol("<="), inner, u256_to_sexpr(b.eval())].sexpr(),
+                    ]
+                    .sexpr(),
+                ]
+                .sexpr()
+            }
+        }
+        Type::Vector(_) => todo!(),
+        Type::Vectorof(_, _) => todo!(),
+        Type::Struct(_, _) => todo!(),
+        Type::Union(_, _) => todo!(),
     }
 }
 
@@ -144,8 +269,9 @@ mod tests {
                         r"
                         def succ<$n>(x: {$n..$n}) = $n + 1
                         def peel<$n>(x : {$n+1..$n+1}) = $n
+                        def equal<T>(x: T, y: T) = x == y
                         ---
-                        [peel(succ(succ(0))*1000), [2, 3, 4, 5], 6]
+                        equal(1 as Nat, 2 as Nat)
                 ",
                         module
                     )
