@@ -1,9 +1,10 @@
 // "lexer" items
 reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" }
-nat_literal = @{ !reserved ~ ASCII_DIGIT+ }
-type_name   = @{ !reserved ~ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
-var_name    = @{ !reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
-cgvar_name  = @{ !reserved ~ "$" ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
+nat_literal = @{ ASCII_DIGIT+ }
+type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
+var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
+		  (reserved ~ var_name) }
+cgvar_name  = @{ "$" ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
 add         = {"+"}
 sub         = {"-"}
 append      = {"++"}
@@ -17,6 +18,7 @@ geq         = {">="}
 le          = {"<"}
 leq         = {"<="}
 WHITESPACE = _{" " | "\t" | "\n"}
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
 
 // top-level program
 program = {

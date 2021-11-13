@@ -31,11 +31,16 @@ fn codegen_fundef(fdef: &FunDefn) -> Value {
 }
 
 fn codegen_expr(expr: &Expr) -> Value {
-    let itype = expr.itype.clone();
     match &expr.inner {
-        ExprInner::BinOp(BinOp::Eq, x, y) => {
-            generate_eq_check(&x.itype, codegen_expr(x), codegen_expr(y))
-        }
+        ExprInner::BinOp(BinOp::Eq, x, y) => generate_eq_check(
+            if x.itype.subtype_of(&y.itype) {
+                &y.itype
+            } else {
+                &x.itype
+            },
+            codegen_expr(x),
+            codegen_expr(y),
+        ),
         ExprInner::BinOp(op, x, y) => {
             let x = codegen_expr(x);
             let y = codegen_expr(y);
@@ -75,7 +80,7 @@ fn codegen_expr(expr: &Expr) -> Value {
         }
         ExprInner::LitConst(_) => unreachable!(),
         ExprInner::Var(v) => Value::symbol(v.to_string()),
-        ExprInner::IsType(_, _) => todo!(),
+        ExprInner::IsType(a, t) => generate_type_check(t, Value::symbol(a.to_string())),
         ExprInner::VectorRef(v, i) => {
             [Value::symbol("v-get"), codegen_expr(v), codegen_expr(i)].sexpr()
         }
@@ -91,8 +96,8 @@ fn codegen_expr(expr: &Expr) -> Value {
 
 fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
     match t {
-        Type::None => Value::Bool(true),
-        Type::Any => Value::Bool(false),
+        Type::None => Value::Number(1.into()),
+        Type::Any => Value::Number(0.into()),
         Type::Var(_) => unreachable!(),
         Type::NatRange(_, _) => [Value::symbol("="), left_expr, right_expr].sexpr(),
         Type::Vector(v) => v
@@ -115,7 +120,7 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
                     .sexpr(),
                 )
             })
-            .fold(Value::Bool(true), |a, b| {
+            .fold(Value::Number(1.into()), |a, b| {
                 [Value::symbol("and"), a, b].sexpr()
             }),
         Type::Vectorof(t, n) => generate_eq_check(
@@ -152,7 +157,7 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
                 [
                     Value::symbol("and"),
                     both_u,
-                    generate_eq_check(t, left_expr.clone(), right_expr.clone()),
+                    generate_eq_check(t, left_expr, right_expr),
                 ]
                 .sexpr(),
             ]
@@ -187,8 +192,8 @@ fn u256_to_sexpr(num: U256) -> Value {
 
 fn generate_type_check(t: &Type, inner: Value) -> Value {
     match t {
-        Type::None => Value::Bool(false),
-        Type::Any => Value::Bool(true),
+        Type::None => Value::Number(0.into()),
+        Type::Any => Value::Number(1.into()),
         Type::Var(_) => unreachable!(),
         Type::NatRange(a, b) => {
             let is_number_expr = [
@@ -267,11 +272,9 @@ mod tests {
                 typecheck_program(
                     parse_program(
                         r"
-                        def succ<$n>(x: {$n..$n}) = $n + 1
-                        def peel<$n>(x : {$n+1..$n+1}) = $n
-                        def equal<T>(x: T, y: T) = x == y
-                        ---
-                        equal(1 as Nat, 2 as Nat)
+def double<$n, T>(v: [T; $n]) = v ++ v
+---
+double(double(double([1])))
                 ",
                         module
                     )

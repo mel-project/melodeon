@@ -33,12 +33,15 @@ impl<Tv: Variable, Cv: Variable> TypeFacts<Tv, Cv> {
 
     /// Union with another type facts. Duplicates are handled by computing the *intersection* of the two types.
     pub fn union(mut self, other: Self) -> Self {
-        //  A best-effort attempt at intersecting the types is done (T & U is transformed into (T | U) - (T - U) - (U - T)
+        //  A best-effort attempt at intersecting the types is done
         self.mapping = self.mapping.union_with(other.mapping, |a, b| {
-            a.smart_union(&b)
-                .subtract(&a.subtract(&b))
-                .subtract(&b.subtract(&a))
-                .into_owned()
+            if a.subtype_of(&b) {
+                a
+            } else if b.subtype_of(&a) {
+                b
+            } else {
+                Type::None
+            }
         });
         self
     }

@@ -222,6 +222,8 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                             Rule::div => BinOp::Div,
                             Rule::equal => BinOp::Eq,
                             Rule::append => BinOp::Append,
+                            Rule::land => BinOp::Land,
+                            Rule::lor => BinOp::Lor,
                             _ => unreachable!(),
                         }
                         .with_ctx(p2ctx(child, source)),
