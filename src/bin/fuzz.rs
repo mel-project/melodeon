@@ -23,7 +23,7 @@ fn test_once(data: &[u8]) -> CtxResult<()> {
     let module = ModuleId(Symbol::from("whatever.melo"));
     let data = String::from_utf8_lossy(data);
     log::info!("input string: {}", data);
-    if data.contains('.') || data.contains('.') || data.contains('.') || data.contains('.') {
+    if data.contains('.') {
         // skip anything that contains unsupported constructs
         return Ok(());
     }
