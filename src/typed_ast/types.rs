@@ -4,7 +4,7 @@ use ethnum::U256;
 
 use crate::containers::{List, Map, Symbol, Void};
 
-use super::{ConstExpr, Type, Variable};
+use crate::typesys::{ConstExpr, Type, Variable};
 
 #[derive(Debug, Clone)]
 pub struct Program {
