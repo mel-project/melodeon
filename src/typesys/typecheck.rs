@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
@@ -5,15 +6,17 @@ use dashmap::DashMap;
 use tap::Tap;
 
 use crate::{
-    containers::{List, Map, Symbol, Void},
+    containers::{List, Set, Map, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
-    typesys::{typecheck::state::FunctionType, BinOp, ConstExpr, ExprInner, FunDefn, Type},
+    typesys::{Type, ConstExpr, Variable},
+    typed_ast::{Expr, Program, BinOp, ExprInner, FunDefn},
 };
 
-use self::{facts::TypeFacts, state::TypecheckState};
-
-use super::{Expr, Program, Variable};
+use self::{
+    facts::TypeFacts,
+    state::{FunctionType, TypecheckState},
+};
 
 mod facts;
 mod state;
@@ -670,6 +673,7 @@ fn typecheck_const_expr<Tv: Variable, Cv: Variable>(
         )),
     }
 }
+
 
 /// Monomorphizes a set of function definitions and a "preliminary" body into a fully degenericized version.
 ///

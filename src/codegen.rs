@@ -2,7 +2,8 @@ use std::ops::Deref;
 
 use crate::{
     containers::Symbol,
-    typesys::{BinOp, Expr, ExprInner, FunDefn, Program, Type},
+    typesys::Type,
+    typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
 };
 use ethnum::U256;
 use lexpr::Value;
