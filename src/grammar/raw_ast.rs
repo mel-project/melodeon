@@ -1,7 +1,7 @@
 use ethnum::U256;
 
 use crate::{
-    containers::{List, Symbol},
+    containers::{List, Map, Symbol},
     context::Ctx,
 };
 
@@ -22,6 +22,10 @@ pub enum RawDefn {
         args: List<Ctx<RawTypeBind>>,
         rettype: Option<Ctx<RawTypeExpr>>,
         body: Ctx<RawExpr>,
+    },
+    Struct {
+        name: Ctx<Symbol>,
+        fields: List<Ctx<RawTypeBind>>,
     },
     Constant(Ctx<Symbol>, Ctx<RawExpr>),
 }
@@ -61,6 +65,7 @@ pub enum RawExpr {
     BinOp(Ctx<BinOp>, Ctx<RawExpr>, Ctx<RawExpr>),
     LitNum(U256),
     LitVec(List<Ctx<Self>>),
+    LitStruct(Symbol, Map<Symbol, Ctx<RawExpr>>),
     Var(Symbol),
     CgVar(Symbol),
 

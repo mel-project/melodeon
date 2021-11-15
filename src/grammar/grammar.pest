@@ -1,5 +1,5 @@
 // "lexer" items
-reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" }
+reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "struct" }
 nat_literal = @{ ASCII_DIGIT+ }
 type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
 var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
@@ -29,7 +29,7 @@ program = {
 
 // definitions
 definition = {
-    fun_def | fun_def_gen
+    fun_def | fun_def_gen | struct_def
 }
 
 fun_def = { "def" ~ var_name ~ "(" ~ fun_args ~ ")" ~ (":" ~ type_expr)? ~ "=" ~ expr }
@@ -40,8 +40,10 @@ generic_params = {
 }
 
 fun_args = {
-    (var_name ~ ":" ~ type_expr ~ ",")* ~ var_name ~ ":" ~ type_expr
+    (var_name ~ ":" ~ type_expr ~ ",")* ~ (var_name ~ ":" ~ type_expr)?
 }
+
+struct_def = { "struct" ~ type_name ~ "{" ~ fun_args ~ "}" }
 
 // types
 type_expr = _{
@@ -122,8 +124,10 @@ terminal_expr   = _{
     var_name |
     vector_literal |
     range_literal |
+    struct_literal |
     "(" ~ expr ~ ")"
 }
 is_type     = { var_name ~ "is" ~ type_expr }
 vector_literal = { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
 range_literal = {"[" ~ expr ~ ".." ~ expr ~ "]"}
+struct_literal = { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }

@@ -40,7 +40,7 @@ pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     NatRange(ConstExpr<CVar>, ConstExpr<CVar>),
     Vector(List<Self>),
     Vectorof(Arc<Self>, ConstExpr<CVar>),
-    Struct(Symbol, List<Self>),
+    Struct(Symbol, List<(Symbol, Self)>),
     Union(Arc<Self>, Arc<Self>),
 }
 
@@ -406,9 +406,11 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     Some(Cow::Owned(t.as_ref().clone()))
                 }
             }
-            Type::Struct(_, b) => {
-                Some(Cow::Owned(Type::Vector(b.clone()).index(idx)?.into_owned()))
-            }
+            Type::Struct(_, b) => Some(Cow::Owned(
+                Type::Vector(b.iter().map(|a| a.1.clone()).collect())
+                    .index(idx)?
+                    .into_owned(),
+            )),
             Type::Union(a, b) => Some(Cow::Owned(Type::Union(
                 a.index(idx)?.into_owned().into(),
                 b.index(idx)?.into_owned().into(),
@@ -512,7 +514,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 })
                 .chain(std::iter::once(List::new()))
                 .collect(),
-            Type::Struct(_, i) => Type::Vector(i.clone()).cvar_locations(),
+            Type::Struct(_, i) => {
+                Type::Vector(i.iter().map(|a| a.1.clone()).collect()).cvar_locations()
+            }
             Type::Union(t, u) => t.cvar_locations().union(u.cvar_locations()),
         }
     }
@@ -559,7 +563,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     })
                     .collect()
             }
-            Type::Struct(_, inner) => Type::Vector(inner.clone()).tvar_locations(),
+            Type::Struct(_, inner) => {
+                Type::Vector(inner.iter().map(|a| a.1.clone()).collect()).tvar_locations()
+            }
             Type::Union(a, b) => {
                 let a = a.tvar_locations();
                 let b = b.tvar_locations();
@@ -609,7 +615,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             Type::Struct(name, b) => Some(Type::Struct(
                 *name,
                 b.iter()
-                    .map(|b| b.try_fill_tvars_inner(mapping))
+                    .map(|(a, b)| Some((*a, b.try_fill_tvars_inner(mapping)?)))
                     .collect::<Option<List<_>>>()?,
             )),
             Type::Union(a, b) => Some(Type::Union(
@@ -661,7 +667,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             Type::Struct(name, b) => Some(Type::Struct(
                 *name,
                 b.iter()
-                    .map(|b| b.try_fill_cvars_inner(mapping))
+                    .map(|(a, b)| Some((*a, b.try_fill_cvars_inner(mapping)?)))
                     .collect::<Option<List<_>>>()?,
             )),
             Type::Union(a, b) => Some(Type::Union(
@@ -937,3 +943,14 @@ mod tests {
 }
 
 // def get<T, $n>(vec: [T; $n + 1], idx: {0..$n}) : T = vec[idx]
+
+/// Struct name to unique ID.
+pub fn struct_uniqid(name: Symbol) -> U256 {
+    U256::from_be_bytes(
+        *blake3::keyed_hash(
+            b"__________melodeon_struct_uniqid",
+            name.to_string().as_bytes(),
+        )
+        .as_bytes(),
+    )
+}
