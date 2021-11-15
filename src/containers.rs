@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Display},
-    sync::atomic::{AtomicBool, AtomicU64},
+    sync::atomic::AtomicU64,
 };
 
 use internment::Intern;

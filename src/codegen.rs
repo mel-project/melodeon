@@ -297,10 +297,15 @@ mod tests {
                 typecheck_program(
                     parse_program(
                         r"
+struct Point {
+    x: Nat,
+    y: Nat
+}
 def double<$n, T>(v: [T; $n]) = v ++ v
 def tail<$n, T>(v: [T; $n + 1]) = v[1..$n+1]
+def pt_x(x: Point) = x.x
 ---
-tail([1, 2, 3, 4, 5, 6, 7]) as [Nat; 6]
+pt_x(Point {x: 1, y: 2})+3
                 ",
                         module
                     )

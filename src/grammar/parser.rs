@@ -7,7 +7,7 @@ use pest_derive::Parser;
 use tap::Tap;
 
 use crate::{
-    containers::{List, Symbol},
+    containers::{List, Map, Symbol},
     context::{Ctx, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
     grammar::BinOp,
 };
@@ -87,6 +87,20 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
                 args: fun_args,
                 rettype: ret_type,
                 body,
+            }
+            .with_ctx(ctx)
+        }
+        Rule::struct_def => {
+            let ctx = p2ctx(&pair, source);
+            let mut children = pair.into_inner();
+            let struct_name = children.next().unwrap();
+            let struct_name =
+                Symbol::from(struct_name.as_str()).with_ctx(p2ctx(&struct_name, source));
+            let struct_elems = children.next().unwrap();
+            let elems = parse_fun_args(struct_elems, source);
+            RawDefn::Struct {
+                name: struct_name,
+                fields: elems,
             }
             .with_ctx(ctx)
         }
@@ -303,6 +317,16 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             RawExpr::LitVec(children).with_ctx(ctx)
         }
         Rule::cgvar_name => RawExpr::CgVar(Symbol::from(pair.as_str())).with_ctx(ctx),
+        Rule::struct_literal => {
+            let mut children = pair.into_inner();
+            let name = Symbol::from(children.next().unwrap().as_str());
+            let mut bindings = Map::new();
+            while let Some(field_name) = children.next() {
+                let field_contents = parse_expr(children.next().unwrap(), source);
+                bindings.insert(Symbol::from(field_name.as_str()), field_contents);
+            }
+            RawExpr::LitStruct(name, bindings).with_ctx(ctx)
+        }
         _ => unreachable!(),
     }
 }

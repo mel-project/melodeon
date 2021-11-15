@@ -8,7 +8,9 @@ use crate::{
     containers::{List, Map, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
-    typesys::{typecheck::state::FunctionType, BinOp, ConstExpr, ExprInner, FunDefn, Type},
+    typesys::{
+        struct_uniqid, typecheck::state::FunctionType, BinOp, ConstExpr, ExprInner, FunDefn, Type,
+    },
 };
 
 use self::{facts::TypeFacts, state::TypecheckState};
@@ -120,6 +122,21 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                 });
             }
             crate::grammar::RawDefn::Constant(_, _) => todo!(),
+            crate::grammar::RawDefn::Struct { name, fields } => {
+                let tstate = state.clone();
+                state = state.bind_type_alias(
+                    **name,
+                    Type::Struct(
+                        **name,
+                        fields
+                            .iter()
+                            .map(|rtb| {
+                                Ok((*rtb.name, typecheck_type_expr(&tstate, rtb.bind.clone())?))
+                            })
+                            .collect::<CtxResult<List<_>>>()?,
+                    ),
+                );
+            }
         }
     }
     log::trace!("initial definitions created: {:?}", fun_defs);
@@ -410,7 +427,36 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 )
             }
         }
-        RawExpr::Field(_, _) => todo!(),
+        RawExpr::Field(a, f) => {
+            let a = recurse(a)?.0;
+            if let Type::Struct(_, fields) = a.itype.clone() {
+                let idx = fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (s, _))| *s == *f)
+                    .map(|a| (a.0, a.1 .1.clone()));
+                if let Some((idx, t)) = idx {
+                    return Ok((
+                        Expr {
+                            itype: t,
+                            inner: ExprInner::VectorRef(
+                                a.into(),
+                                Expr {
+                                    itype: Type::all_nat(),
+                                    inner: ExprInner::LitNum(((idx + 1) as u64).into()),
+                                }
+                                .into(),
+                            ),
+                        },
+                        TypeFacts::empty(),
+                    ));
+                }
+            }
+            Err(
+                anyhow::anyhow!("value of type {:?} has no field named {:?}", a.itype, f)
+                    .with_ctx(f.ctx()),
+            )
+        }
         RawExpr::VectorRef(v, i) => {
             let (v, _) = recurse(v)?;
             let (i, _) = recurse(i)?;
@@ -561,6 +607,53 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     "cannot resolve slice indices (of types {:?} and {:?}) to single numbers",
                     l.itype,
                     r.itype
+                )
+                .with_ctx(ctx))
+            }
+        }
+        RawExpr::LitStruct(name, fields) => {
+            let stype = state
+                .lookup_type_alias(name)
+                .context(format!("undefined struct type {:?}", name))
+                .err_ctx(ctx)?;
+            if let Type::Struct(_, ifields) = &stype {
+                if fields.len() != ifields.len() {
+                    Err(anyhow::anyhow!(
+                        "struct {:?} needs {} fields, got {} instead",
+                        name,
+                        ifields.len(),
+                        fields.len()
+                    )
+                    .with_ctx(ctx))
+                } else {
+                    let mut args = ifields.iter().map(|(fname, correct_t)| {
+                        let actual = recurse(fields[fname].clone())?.0;
+                        if !actual.itype.subtype_of(correct_t) {
+                            Err(anyhow::anyhow!("field {:?}.{:?} must be of type {:?}, but given a value of type {:?}", name, fname, correct_t, actual.itype).with_ctx(fields[fname].ctx()))
+                        } else {
+                            Ok(actual)
+                        }
+                    }).collect::<CtxResult<Vec<_>>>()?;
+                    let sid = struct_uniqid(name);
+                    args.insert(
+                        0,
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::LitNum(sid),
+                        },
+                    );
+                    Ok((
+                        Expr {
+                            itype: stype.clone(),
+                            inner: ExprInner::LitVec(args),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+            } else {
+                Err(anyhow::anyhow!(
+                    "type {:?} is not a struct and can't be instantiated like one",
+                    name
                 )
                 .with_ctx(ctx))
             }
@@ -837,7 +930,7 @@ mod tests {
                     r"
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x : {$n+1..$n+1}) = $n
----
+--- 
 peel(peel(succ(succ(0))))
                 ",
                     module
