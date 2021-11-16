@@ -1,17 +1,10 @@
-use std::sync::Arc;
 use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
 use dashmap::DashMap;
 use tap::Tap;
 
-use crate::{
-    containers::{List, Set, Map, Symbol, Void},
-    context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
-    grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
-    typesys::{struct_uniqid, Type, ConstExpr, Variable},
-    typed_ast::{Expr, Program, BinOp, ExprInner, FunDefn},
-};
+use crate::{containers::{List, Set, Map, Symbol, Void}, context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr}, grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr}, typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program, sort_defs}, typesys::{struct_uniqid, Type, ConstExpr, Variable}};
 
 use self::{
     facts::TypeFacts,
@@ -144,8 +137,12 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
     // time to typecheck the expression preliminarily
     let (prelim_body, _) = typecheck_expr(state, raw.body.clone())?;
     log::trace!("preliminary body created: {:?}", prelim_body);
+
+    // Topologically sort definitions
+    let sorted = sort_defs(fun_defs);
+    println!("sorted defs\n{:?}", sorted.iter().map(|d| d.name).collect::<List<Symbol>>());
     // MONOMORPHIZE!
-    Ok(monomorphize(fun_defs, prelim_body))
+    Ok(monomorphize(sorted, prelim_body))
 }
 
 /// Typechecks a single expression, returning a single typed ast node.
