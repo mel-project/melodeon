@@ -75,7 +75,7 @@ expr = _{
     bin_expr    
 }
 
-cflow_expr = _{ let_expr | if_expr | do_expr }
+cflow_expr = _{ let_expr | if_expr | loop_expr }
 
 let_expr = {
     "let" ~ var_name ~ "=" ~ expr ~ "in" ~ expr
@@ -85,12 +85,12 @@ if_expr = {
     "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr
 }
 
-do_expr = {
-    "do" ~ ((expr | set_bang) ~ ";")* ~ (expr| set_bang)? ~ "done"
+loop_expr = {
+    "loop" ~ const_expr ~ "do" ~ (set_bang ~ ";")* ~ (set_bang)? ~ "done" ~ "with" ~ expr
 }
 
 set_bang = {
-    "set!" ~ var_name ~ expr
+    "set!" ~ var_name ~ "=" ~ expr
 }
 
 bin_expr = _{
@@ -123,11 +123,9 @@ terminal_expr   = _{
     cgvar_name |
     var_name |
     vector_literal |
-    range_literal |
     struct_literal |
     "(" ~ expr ~ ")"
 }
 is_type     = { var_name ~ "is" ~ type_expr }
 vector_literal = { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
-range_literal = {"[" ~ expr ~ ".." ~ expr ~ "]"}
 struct_literal = { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }

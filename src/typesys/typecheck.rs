@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
@@ -6,11 +5,11 @@ use dashmap::DashMap;
 use tap::Tap;
 
 use crate::{
-    containers::{List, Set, Map, Symbol, Void},
+    containers::{List, Map, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
-    typesys::{struct_uniqid, Type, ConstExpr, Variable},
-    typed_ast::{Expr, Program, BinOp, ExprInner, FunDefn},
+    typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
+    typesys::{struct_uniqid, ConstExpr, Type, Variable},
 };
 
 use self::{
@@ -659,6 +658,21 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .with_ctx(ctx))
             }
         }
+        RawExpr::Loop(iterations, body, end) => {
+            let iterations = typecheck_const_expr(&state, iterations)?;
+            let body = body
+                .into_iter()
+                .map(|(s, v)| Ok((s, recurse(v)?.0)))
+                .collect::<CtxResult<List<_>>>()?;
+            let end = recurse(end)?.0;
+            Ok((
+                Expr {
+                    itype: end.itype.clone(),
+                    inner: ExprInner::Loop(iterations, body, end.into()),
+                },
+                TypeFacts::empty(),
+            ))
+        }
     }
 }
 
@@ -764,7 +778,6 @@ fn typecheck_const_expr<Tv: Variable, Cv: Variable>(
         )),
     }
 }
-
 
 /// Monomorphizes a set of function definitions and a "preliminary" body into a fully degenericized version.
 ///
@@ -890,6 +903,11 @@ fn monomorphize_inner(
             ExprInner::VectorSlice(v, i, j) => {
                 ExprInner::VectorSlice(recurse(&v).into(), recurse(&i).into(), recurse(&j).into())
             }
+            ExprInner::Loop(n, body, res) => ExprInner::Loop(
+                n.fill(|c| cvar_scope.get(c).cloned().unwrap()),
+                body.iter().map(|(s, v)| (*s, recurse(v))).collect(),
+                recurse(&res).into(),
+            ),
         },
         itype: body
             .itype
@@ -933,7 +951,10 @@ mod tests {
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x : {$n+1..$n+1}) = $n
 --- 
-peel(peel(succ(succ(0))))
+let x = 0 in
+loop 100 do
+set! x = x + 1
+end with x
                 ",
                     module
                 )
