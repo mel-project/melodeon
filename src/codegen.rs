@@ -2,8 +2,8 @@ use std::ops::Deref;
 
 use crate::{
     containers::Symbol,
-    typesys::Type,
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
+    typesys::Type,
 };
 use ethnum::U256;
 use lexpr::Value;
@@ -115,6 +115,26 @@ fn codegen_expr(expr: &Expr) -> Value {
             codegen_expr(v),
             codegen_expr(i),
             codegen_expr(j),
+        ]
+        .sexpr(),
+        ExprInner::Loop(n, bod, res) => [
+            Value::symbol("let"),
+            [].sexpr(),
+            [
+                Value::symbol("loop"),
+                Value::Number(n.eval().as_u64().into()),
+            ]
+            .into_iter()
+            .chain(bod.iter().map(|(s, x)| {
+                [
+                    Value::symbol("set!"),
+                    Value::symbol(s.to_string()),
+                    codegen_expr(x),
+                ]
+                .sexpr()
+            }))
+            .sexpr(),
+            codegen_expr(res),
         ]
         .sexpr(),
     }
@@ -298,15 +318,13 @@ mod tests {
                 typecheck_program(
                     parse_program(
                         r"
-struct Point {
-    x: Nat,
-    y: Nat
-}
-def double<$n, T>(v: [T; $n]) = v ++ v
-def tail<$n, T>(v: [T; $n + 1]) = v[1..$n+1]
-def pt_x(x: Point) = x.x
----
-pt_x(Point {x: 1, y: 2})+3
+                        def succ<$n>(x: {$n..$n}) = $n + 1
+                        def peel<$n>(x : {$n+1..$n+1}) = $n
+                        --- 
+                        let x = 0 in
+                        loop 100 do
+                            set! x = x + 1
+                        done with x
                 ",
                         module
                     )

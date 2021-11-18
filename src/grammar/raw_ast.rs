@@ -76,6 +76,8 @@ pub enum RawExpr {
     VectorSlice(Ctx<Self>, Ctx<Self>, Ctx<Self>),
     VectorUpdate(Ctx<Self>, Ctx<Self>, Ctx<Self>),
 
+    Loop(Ctx<RawConstExpr>, List<(Symbol, Ctx<Self>)>, Ctx<Self>),
+
     IsType(Symbol, Ctx<RawTypeExpr>),
     AsType(Ctx<Self>, Ctx<RawTypeExpr>),
 }

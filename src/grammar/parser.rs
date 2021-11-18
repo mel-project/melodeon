@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::{cell::Cell, collections::VecDeque};
 
 use anyhow::Context;
 use ethnum::U256;
@@ -180,7 +180,8 @@ fn parse_const_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawConstExpr> {
             head
         }
         Rule::nat_literal => {
-            RawConstExpr::Lit(U256::from_str_radix(pair.as_str(), 10).unwrap()).with_ctx(ctx)
+            RawConstExpr::Lit(U256::from_str_radix(pair.as_str(), 10).unwrap_or_default())
+                .with_ctx(ctx)
         }
         Rule::cgvar_name => RawConstExpr::Sym(Symbol::from(pair.as_str())).with_ctx(ctx),
         _ => unreachable!(),
@@ -299,7 +300,8 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             toret
         }
         Rule::nat_literal => {
-            RawExpr::LitNum(U256::from_str_radix(pair.as_str(), 10).unwrap()).with_ctx(ctx)
+            RawExpr::LitNum(U256::from_str_radix(pair.as_str(), 10).unwrap_or_default())
+                .with_ctx(ctx)
         }
         Rule::var_name => RawExpr::Var(Symbol::from(pair.as_str())).with_ctx(ctx),
         Rule::is_type => {
@@ -327,8 +329,25 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             }
             RawExpr::LitStruct(name, bindings).with_ctx(ctx)
         }
+        Rule::loop_expr => {
+            let mut children: VecDeque<_> = pair.into_inner().collect();
+            let iterations = parse_const_expr(children.pop_front().unwrap(), source);
+            let end_with = parse_expr(children.pop_back().unwrap(), source);
+            let inner: List<_> = children
+                .into_iter()
+                .map(|c| parse_setbang(c, source))
+                .collect();
+            RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx)
+        }
         _ => unreachable!(),
     }
+}
+
+fn parse_setbang(pair: Pair<Rule>, source: ModuleId) -> (Symbol, Ctx<RawExpr>) {
+    let mut children = pair.into_inner();
+    let var_name = Symbol::from(children.next().unwrap().as_str());
+    let value = parse_expr(children.next().unwrap(), source);
+    (var_name, value)
 }
 
 fn p2ctx(pair: &Pair<Rule>, source: ModuleId) -> CtxLocation {

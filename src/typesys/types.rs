@@ -953,4 +953,6 @@ pub fn struct_uniqid(name: Symbol) -> U256 {
         )
         .as_bytes(),
     )
+    .as_u64()
+    .into()
 }
