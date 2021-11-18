@@ -11,6 +11,7 @@ pub fn foldr<A,Tp,Cg,F>(f: F, ast: Expr<Tp,Cg>) -> Expr<Tp,Cg> {
 }
 */
 
+/*
 pub fn sort_defs(defs: List<FunDefn<TypeParam, CgParam>>)
 -> List<FunDefn<TypeParam, CgParam>> {
     // TODO assumes no cycles, will not halt if there are cycles
@@ -25,13 +26,14 @@ fn sort_single_def<T: Variable,C: Variable>(
     visited: Set<Symbol>)
 -> (List<FunDefn<T, C>>, Set<Symbol>) {
     if !visited.contains(&def.name) {
-        defs.clone().into_iter().fold(
+        def.parents().into_iter().fold(
             (defs, visited.update(def.name)),
             |(defs, visited), parent| sort_single_def(parent, defs, visited))
     } else {
         (defs, visited)
     }
 }
+*/
 
 impl<T: Variable, C: Variable> FunDefn<T,C> {
     /// Get a list of all definition names referenced in a definition's body.
