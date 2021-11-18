@@ -7,9 +7,9 @@ use tap::Tap;
 use crate::{
     containers::{List, Map, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
-    grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
+    grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr, sort_defs},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
-    typesys::{struct_uniqid, ConstExpr, Type, Variable},
+    typesys::{struct_uniqid, Type, ConstExpr, Variable}
 };
 
 use self::{
@@ -58,11 +58,14 @@ fn assert_subtype<Tv: Variable, Cv: Variable>(
 
 /// Typechecks a whole program, resolving free variables fully.
 pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
+    // Topologically sort definitions
+    let sorted = sort_defs(raw.definitions.clone());
+
     // build the typecheck state
-    // TODO: sort the definitions
     let mut state = TypecheckState::new();
     let mut fun_defs: List<FunDefn<TypeParam, CgParam>> = List::new();
-    for definition in raw.definitions.iter() {
+    //for definition in raw.definitions.iter() {
+    for definition in sorted.iter() {
         match definition.deref() {
             crate::grammar::RawDefn::Function {
                 name,
@@ -143,6 +146,7 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
     // time to typecheck the expression preliminarily
     let (prelim_body, _) = typecheck_expr(state, raw.body.clone())?;
     log::trace!("preliminary body created: {:?}", prelim_body);
+
     // MONOMORPHIZE!
     Ok(monomorphize(fun_defs, prelim_body))
 }
@@ -948,6 +952,7 @@ mod tests {
             typecheck_program(
                 parse_program(
                     r"
+def foo<$n>() = succ(0)
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x : {$n+1..$n+1}) = $n
 --- 
