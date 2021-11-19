@@ -1,8 +1,7 @@
 use ethnum::U256;
-use imbl::hashset;
 
 use crate::{
-    containers::{Set, List, Map, Symbol},
+    containers::{List, Map, Set, Symbol},
     context::Ctx,
 };
 
@@ -99,9 +98,8 @@ pub enum BinOp {
     Eq,
 }
 
-pub fn sort_defs(defs: List<Ctx<RawDefn>>)
--> List<Ctx<RawDefn>> {
-    let mut sorted  = List::new();
+pub fn sort_defs(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
+    let mut sorted = List::new();
     let mut visited = Set::new();
 
     for def in defs.iter() {
@@ -115,8 +113,8 @@ fn visit(
     def: Symbol,
     defs: &List<Ctx<RawDefn>>,
     mut sorted: &mut List<Ctx<RawDefn>>,
-    mut visited: &mut Set<Symbol>) {
-
+    mut visited: &mut Set<Symbol>,
+) {
     if !visited.contains(&def) {
         visited.insert(def);
 
@@ -127,25 +125,26 @@ fn visit(
             visit(parent, defs, &mut sorted, &mut visited);
         }
 
-        sorted.push(def.clone());
+        sorted.push_back(def.clone());
     }
 }
 
-
-pub fn sort_defsx(defs: List<Ctx<RawDefn>>)
--> List<Ctx<RawDefn>> {
+pub fn sort_defsx(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
     // TODO assumes no cycles, will not halt if there are cycles
-    defs.clone().into_iter().fold(
-        (List::new(), Set::new()),
-        |(sorted, visited), def| sort_single_def(def, defs.clone(), sorted, visited)).0
+    defs.clone()
+        .into_iter()
+        .fold((List::new(), Set::new()), |(sorted, visited), def| {
+            sort_single_def(def, defs.clone(), sorted, visited)
+        })
+        .0
 }
 
 fn sort_single_def(
     def: Ctx<RawDefn>,
     defs: List<Ctx<RawDefn>>,
     sorted: List<Ctx<RawDefn>>,
-    visited: Set<Symbol>)
--> (List<Ctx<RawDefn>>, Set<Symbol>) {
+    visited: Set<Symbol>,
+) -> (List<Ctx<RawDefn>>, Set<Symbol>) {
     let name = def.name();
     if !visited.contains(name) {
         let (mut sorted, visited) = def.parents().iter().fold(
@@ -155,10 +154,10 @@ fn sort_single_def(
                     find_by_name(&defs, parent)
                         .expect("A parent reference should always be in the definitions list, this is a bug").clone(),
                     defs.clone(),
-                    sorted.clone(),
+                    sorted,
                     visited));
 
-        sorted.push(def);
+        sorted.push_back(def);
         (sorted, visited)
     } else {
         (defs, visited)
@@ -173,8 +172,8 @@ impl RawDefn {
     /// Get the name of a definition
     pub fn name(&self) -> &Symbol {
         match self {
-            RawDefn::Function{name, ..} => name,
-            RawDefn::Struct{name, ..} => name,
+            RawDefn::Function { name, .. } => name,
+            RawDefn::Struct { name, .. } => name,
             RawDefn::Constant(name, _) => name,
         }
     }
@@ -182,9 +181,10 @@ impl RawDefn {
     /// Get a list of all definition names referenced in a definition's body.
     pub fn parents(&self) -> Set<Symbol> {
         match self {
-            RawDefn::Function{body, ..} => expr_parents(body),
-            RawDefn::Struct{name: _, fields} =>
-                fields.iter().fold(Set::new(), |acc, field| acc.union(typebind_parents(&field.bind))),
+            RawDefn::Function { body, .. } => expr_parents(body),
+            RawDefn::Struct { name: _, fields } => fields.iter().fold(Set::new(), |acc, field| {
+                acc.union(typebind_parents(&field.bind))
+            }),
             RawDefn::Constant(_, body) => expr_parents(body),
         }
     }
@@ -195,10 +195,10 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
 
     match tb {
         RawTypeExpr::Sym(sym) => Set::unit(*sym),
-        RawTypeExpr::Union(l, r) => rec(l).union(rec(&r)),
+        RawTypeExpr::Union(l, r) => rec(l).union(rec(r)),
         RawTypeExpr::Vector(l) => l.iter().fold(Set::new(), |acc, t| acc.union(rec(t))),
-        RawTypeExpr::Vectorof(t, _) => rec(&t),
-        RawTypeExpr::NatRange(_,_) => Set::new(),
+        RawTypeExpr::Vectorof(t, _) => rec(t),
+        RawTypeExpr::NatRange(_, _) => Set::new(),
     }
 }
 
@@ -208,18 +208,19 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
     match expr {
         // Important cases
         RawExpr::Var(var) => Set::unit(*var),
-        RawExpr::Let(var, val, body) =>
-            rec(val).union(rec(body)).without(var),
-        RawExpr::Apply(fn_name, args) =>
-            args.into_iter().fold(rec(fn_name), |acc, arg| acc.union(rec(arg))),
-        RawExpr::LitStruct(s_name, fields) =>
-            fields.values().fold(Set::unit(*s_name), |acc, field| acc.union(rec(field))),
+        RawExpr::Let(var, val, body) => rec(val).union(rec(body)).without(var),
+        RawExpr::Apply(fn_name, args) => args
+            .into_iter()
+            .fold(rec(fn_name), |acc, arg| acc.union(rec(arg))),
+        RawExpr::LitStruct(s_name, fields) => fields
+            .values()
+            .fold(Set::unit(*s_name), |acc, field| acc.union(rec(field))),
 
         // Trivial cases
         RawExpr::VectorRef(v, idx) => rec(v).union(rec(idx)),
         RawExpr::VectorUpdate(v, old, new) => rec(v).union(rec(old)).union(rec(new)),
         RawExpr::VectorSlice(v, from, to) => rec(v).union(rec(from)).union(rec(to)),
-        RawExpr::If(p,t,f) => rec(p).union(rec(t)).union(rec(f)),
+        RawExpr::If(p, t, f) => rec(p).union(rec(t)).union(rec(f)),
         RawExpr::BinOp(_, a, b) => rec(a).union(rec(b)),
         RawExpr::Field(strct, _) => rec(strct),
         RawExpr::LitVec(v) => v.iter().fold(Set::new(), |acc, e| acc.union(rec(e))),

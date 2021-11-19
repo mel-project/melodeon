@@ -733,7 +733,7 @@ impl<CVar: Variable> ConstExpr<CVar> {
     pub fn cvars(&self) -> List<CVar> {
         let mut accum = List::new();
         self.fill(|v| {
-            accum.push(v.clone());
+            accum.push_back(v.clone());
             Self::Var(v.clone())
         });
         accum
@@ -874,7 +874,8 @@ mod tests {
                     ConstExpr::Plus(Arc::new(1.into()), ConstExpr::Var(Symbol::from("n")).into()),
                 ),
             ]
-            .into(),
+            .into_iter()
+            .collect(),
         );
         let resolved: Type = r1
             .fill_tvars(|sym| {

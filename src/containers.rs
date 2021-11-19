@@ -8,7 +8,7 @@ use internment::Intern;
 /// List type.
 ///
 /// TODO: replace with some good immutable vector
-pub type List<T> = Vec<T>;
+pub type List<T> = imbl::Vector<T>;
 
 /// Set type
 pub type Set<T> = imbl::HashSet<T>;

@@ -7,9 +7,9 @@ use tap::Tap;
 use crate::{
     containers::{List, Map, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
-    grammar::{RawConstExpr, RawExpr, RawProgram, RawTypeExpr, sort_defs},
+    grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
-    typesys::{struct_uniqid, Type, ConstExpr, Variable}
+    typesys::{struct_uniqid, ConstExpr, Type, Variable},
 };
 
 use self::{
@@ -118,7 +118,7 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                     result: rettype,
                 };
                 state = state.bind_fun(**name, fun_info);
-                fun_defs.push(FunDefn {
+                fun_defs.push_back(FunDefn {
                     name: **name,
                     args: args.iter().map(|s| *s.name).collect(),
                     body,
@@ -637,7 +637,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         } else {
                             Ok(actual)
                         }
-                    }).collect::<CtxResult<Vec<_>>>()?;
+                    }).collect::<CtxResult<List<_>>>()?;
                     let sid = struct_uniqid(name);
                     args.insert(
                         0,
@@ -959,7 +959,7 @@ def peel<$n>(x : {$n+1..$n+1}) = $n
 let x = 0 in
 loop 100 do
 set! x = x + 1
-end with x
+done with x
                 ",
                     module
                 )

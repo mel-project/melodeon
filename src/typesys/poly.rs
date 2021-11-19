@@ -106,7 +106,7 @@ fn factors(i: U256) -> List<U256> {
             return toret;
         }
         if i % d == 0 {
-            toret.push(d);
+            toret.push_back(d);
         }
         d += 1;
     }
