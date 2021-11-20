@@ -104,6 +104,11 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
             }
             .with_ctx(ctx)
         }
+        Rule::require => {
+            let ctx = p2ctx(&pair, source);
+            let path = Symbol::from(pair.into_inner().next().unwrap().into_inner().as_str());
+            RawDefn::Require(path).with_ctx(ctx)
+        }
         _ => unreachable!(),
     }
 }

@@ -135,6 +135,7 @@ impl<CVar: Variable> From<&ConstExpr<CVar>> for Polynomial<CVar> {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl<CVar: Variable> Into<ConstExpr<CVar>> for Polynomial<CVar> {
     fn into(self) -> ConstExpr<CVar> {
         self.terms

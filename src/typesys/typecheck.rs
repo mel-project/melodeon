@@ -2,12 +2,13 @@ use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
 use dashmap::DashMap;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tap::Tap;
 
 use crate::{
-    containers::{List, Map, Symbol, Void},
+    containers::{List, Map, Set, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
-    grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
+    grammar::{sort_defs, RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
     typesys::{struct_uniqid, ConstExpr, Type, Variable},
 };
@@ -19,6 +20,13 @@ use self::{
 
 mod facts;
 mod state;
+
+#[derive(Clone, Debug)]
+struct PhaseOneModule {
+    all_defs: List<FunDefn<TypeParam, CgParam>>,
+    exported: Set<Symbol>,
+    body: Expr<TypeParam, CgParam>,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TypeParam(Symbol);
@@ -56,15 +64,45 @@ fn assert_subtype<Tv: Variable, Cv: Variable>(
     }
 }
 
-/// Typechecks a whole program, resolving free variables fully.
-pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
+/// Typechecks a whole program, resolving free variables fully. Must pass in a function that resolves module names to RawPrograms.
+pub fn typecheck_program(
+    raw: Ctx<RawProgram>,
+    module_lookup: impl Fn(Symbol) -> CtxResult<Ctx<RawProgram>> + 'static + Send + Sync,
+) -> CtxResult<Program> {
+    // MONOMORPHIZE!
+    let m = typecheck_program_phaseone(raw, &module_lookup)?;
+    Ok(monomorphize(m.all_defs, m.body))
+}
+
+fn typecheck_program_phaseone(
+    raw: Ctx<RawProgram>,
+    module_lookup: &(impl Fn(Symbol) -> CtxResult<Ctx<RawProgram>> + 'static + Send + Sync),
+) -> CtxResult<PhaseOneModule> {
     // Topologically sort definitions
     let sorted = sort_defs(raw.definitions.clone());
+    //for definition in raw.definitions.iter() {
 
-    // build the typecheck state
+    // Module stuff
+    let mut export_syms = Set::new();
+    let import_mapping = raw
+        .definitions
+        .par_iter()
+        .filter_map(|rawdefn| {
+            if let RawDefn::Require(sym) = rawdefn.deref() {
+                let rr = module_lookup(*sym)
+                    .and_then(|rp| typecheck_program_phaseone(rp, module_lookup))
+                    .map(|a| (*sym, a));
+                Some(rr)
+            } else {
+                None
+            }
+        })
+        .collect::<CtxResult<std::collections::HashMap<_, _>>>()?;
+
+    // build the typecheck state, while populating the external
     let mut state = TypecheckState::new();
     let mut fun_defs: List<FunDefn<TypeParam, CgParam>> = List::new();
-    //for definition in raw.definitions.iter() {
+
     for definition in sorted.iter() {
         match definition.deref() {
             crate::grammar::RawDefn::Function {
@@ -140,15 +178,21 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                     ),
                 );
             }
+            crate::grammar::RawDefn::Require(_) => {}
+            crate::grammar::RawDefn::Provide(sym) => {
+                export_syms.insert(*sym);
+            }
         }
     }
     log::trace!("initial definitions created: {:?}", fun_defs);
     // time to typecheck the expression preliminarily
     let (prelim_body, _) = typecheck_expr(state, raw.body.clone())?;
     log::trace!("preliminary body created: {:?}", prelim_body);
-
-    // MONOMORPHIZE!
-    Ok(monomorphize(fun_defs, prelim_body))
+    Ok(PhaseOneModule {
+        all_defs: fun_defs,
+        exported: export_syms,
+        body: prelim_body,
+    })
 }
 
 /// Typechecks a single expression, returning a single typed ast node.
@@ -951,7 +995,8 @@ mod tests {
             "{:#?}",
             typecheck_program(
                 parse_program(
-                    r"
+                    r#"
+require "deshta.melo"
 def foo<$n>() = succ(0)
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x : {$n+1..$n+1}) = $n
@@ -960,10 +1005,11 @@ let x = 0 in
 loop 100 do
 set! x = x + 1
 done with x
-                ",
+                "#,
                     module
                 )
-                .unwrap()
+                .unwrap(),
+                |_| todo!()
             )
             .unwrap()
         );
