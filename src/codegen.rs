@@ -293,11 +293,11 @@ fn collect_sexpr(mut i: impl Iterator<Item = lexpr::Value>) -> lexpr::Value {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use log::LevelFilter;
 
-    use crate::{
-        containers::Symbol, context::ModuleId, grammar::parse_program, typesys::typecheck_program,
-    };
+    use crate::{context::ModuleId, grammar::parse_program, typesys::typecheck_program};
 
     use super::*;
 
@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn simple_codegen() {
         init_logs();
-        let module = ModuleId(Symbol::from("whatever.melo"));
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{}",
             codegen_program(

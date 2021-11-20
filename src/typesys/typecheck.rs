@@ -7,7 +7,7 @@ use tap::Tap;
 
 use crate::{
     containers::{List, Map, Set, Symbol, Void},
-    context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
+    context::{Ctx, CtxErr, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
     grammar::{sort_defs, RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
     typesys::{struct_uniqid, ConstExpr, Type, Variable},
@@ -67,7 +67,7 @@ fn assert_subtype<Tv: Variable, Cv: Variable>(
 /// Typechecks a whole program, resolving free variables fully. Must pass in a function that resolves module names to RawPrograms.
 pub fn typecheck_program(
     raw: Ctx<RawProgram>,
-    module_lookup: impl Fn(Symbol) -> CtxResult<Ctx<RawProgram>> + 'static + Send + Sync,
+    module_lookup: impl Fn(ModuleId) -> CtxResult<Ctx<RawProgram>> + 'static + Send + Sync,
 ) -> CtxResult<Program> {
     // MONOMORPHIZE!
     let m = typecheck_program_phaseone(raw, &module_lookup)?;
@@ -76,7 +76,7 @@ pub fn typecheck_program(
 
 fn typecheck_program_phaseone(
     raw: Ctx<RawProgram>,
-    module_lookup: &(impl Fn(Symbol) -> CtxResult<Ctx<RawProgram>> + 'static + Send + Sync),
+    module_lookup: &(impl Fn(ModuleId) -> CtxResult<Ctx<RawProgram>> + 'static + Send + Sync),
 ) -> CtxResult<PhaseOneModule> {
     // Topologically sort definitions
     let sorted = sort_defs(raw.definitions.clone());
@@ -967,6 +967,8 @@ fn monomorphize_inner(
 #[cfg(test)]
 mod tests {
 
+    use std::path::Path;
+
     use log::LevelFilter;
 
     use super::*;
@@ -976,7 +978,7 @@ mod tests {
     fn typecheck_simple() {
         init_logs();
         let state: TypecheckState<Void, Void> = TypecheckState::new();
-        let module = ModuleId(Symbol::from("whatever.melo"));
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:#?}",
             typecheck_expr(
@@ -990,13 +992,12 @@ mod tests {
     #[test]
     fn typecheck_whole() {
         init_logs();
-        let module = ModuleId(Symbol::from("whatever.melo"));
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:#?}",
             typecheck_program(
                 parse_program(
                     r#"
-require "deshta.melo"
 def foo<$n>() = succ(0)
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x : {$n+1..$n+1}) = $n
@@ -1009,7 +1010,10 @@ done with x
                     module
                 )
                 .unwrap(),
-                |_| todo!()
+                |m| {
+                    dbg!(m);
+                    todo!()
+                }
             )
             .unwrap()
         );

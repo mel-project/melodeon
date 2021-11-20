@@ -1,6 +1,6 @@
-use std::{fmt::Debug, ops::Deref, sync::Arc};
+use std::{fmt::Debug, ops::Deref, path::Path, sync::Arc};
 
-use crate::containers::Symbol;
+use internment::Intern;
 
 pub type CtxResult<T> = Result<T, CtxErr>;
 
@@ -77,5 +77,33 @@ pub struct CtxLocation {
 }
 
 /// Represents the unique ID of a module.
-#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug)]
-pub struct ModuleId(pub Symbol);
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
+pub struct ModuleId {
+    absolute_path: Intern<String>,
+}
+
+impl ModuleId {
+    /// Create a new one from a Path.
+    pub fn from_path(path: &Path) -> Self {
+        let canon = path.to_string_lossy().into_owned();
+        ModuleId {
+            absolute_path: Intern::new(canon),
+        }
+    }
+
+    /// A module relative to this module.
+    pub fn relative(self, frag: &str) -> Self {
+        let mut path = Path::new(self.absolute_path.as_str()).to_owned();
+        path.pop();
+        path.push(frag);
+        let new = path.to_string_lossy().into_owned();
+        ModuleId {
+            absolute_path: Intern::new(new),
+        }
+    }
+
+    /// Load as file, fallibly.
+    pub fn load_file(self) -> std::io::Result<String> {
+        std::fs::read_to_string(self.absolute_path.as_str())
+    }
+}

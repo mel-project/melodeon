@@ -2,7 +2,7 @@ use ethnum::U256;
 
 use crate::{
     containers::{List, Map, Set, Symbol},
-    context::Ctx,
+    context::{Ctx, ModuleId},
 };
 
 /// A whole program.
@@ -28,7 +28,7 @@ pub enum RawDefn {
         fields: List<Ctx<RawTypeBind>>,
     },
     Constant(Ctx<Symbol>, Ctx<RawExpr>),
-    Require(Symbol),
+    Require(ModuleId),
     Provide(Symbol),
 }
 

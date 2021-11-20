@@ -53,7 +53,7 @@ fun_args = {
 struct_def = { "struct" ~ type_name ~ "{" ~ fun_args ~ "}" }
 
 require = { "require" ~ string_literal }
-provide = { "provide" ~ string_literal }
+provide = { "provide" ~ var_name }
 
 // types
 type_expr = _{
