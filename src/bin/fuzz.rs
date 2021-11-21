@@ -23,10 +23,7 @@ fn test_once(data: &[u8]) -> CtxResult<()> {
     let module = ModuleId(Symbol::from("whatever.melo"));
     let data = String::from_utf8_lossy(data);
     log::info!("input string: {:?}", data);
-    let res = codegen_program(typecheck_program(
-        parse_program(&data, module)?,
-        |_| todo!(),
-    )?);
+    let res = codegen_program(typecheck_program(parse_program(&data, module)?)?);
     log::info!("compiled output: {}", res);
     Ok(())
 }

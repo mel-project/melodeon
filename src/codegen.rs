@@ -328,8 +328,7 @@ mod tests {
                 ",
                         module
                     )
-                    .unwrap(),
-                    |_| todo!()
+                    .unwrap()
                 )
                 .unwrap()
             )

@@ -1,5 +1,5 @@
 // "lexer" items
-reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "struct" | "require" | "provide"}
+reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "struct" }
 nat_literal = @{ ASCII_DIGIT+ }
 type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
 var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
@@ -17,13 +17,6 @@ ge          = {">"}
 geq         = {">="}
 le          = {"<"}
 leq         = {"<="}
-string_literal = ${ "\"" ~ inner ~ "\"" }
-inner = @{ char* }
-char = {
-    !("\"" | "\\") ~ ANY
-    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
-    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
-}
 WHITESPACE = _{" " | "\t" | "\n"}
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* ~ "\n" }
 
@@ -36,7 +29,7 @@ program = {
 
 // definitions
 definition = {
-    fun_def | fun_def_gen | struct_def | require | provide
+    fun_def | fun_def_gen | struct_def
 }
 
 fun_def = { "def" ~ var_name ~ "(" ~ fun_args ~ ")" ~ (":" ~ type_expr)? ~ "=" ~ expr }
@@ -51,9 +44,6 @@ fun_args = {
 }
 
 struct_def = { "struct" ~ type_name ~ "{" ~ fun_args ~ "}" }
-
-require = { "require" ~ string_literal }
-provide = { "provide" ~ string_literal }
 
 // types
 type_expr = _{
