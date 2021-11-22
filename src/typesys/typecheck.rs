@@ -223,21 +223,31 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             match op {
                 crate::grammar::BinOp::Add => {
                     let (a_range, b_range) = check_nats()?;
-                    log::trace!("a_range = {:?}, b_range = {:?}", a_range, b_range);
-                    // add the two ranges
-                    let lower_bound =
-                        ConstExpr::Plus(a_range[&0].clone().into(), b_range[&0].clone().into())
-                            .simplify();
-                    let upper_bound =
-                        ConstExpr::Plus(a_range[&1].clone().into(), b_range[&1].clone().into())
-                            .simplify();
-                    Ok((
-                        Expr {
-                            itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
-                            inner: ExprInner::BinOp(BinOp::Add, a_expr.into(), b_expr.into()),
-                        },
-                        TypeFacts::empty(),
-                    ))
+                    if a_range.len() == 2 && b_range.len() == 2 {
+                        log::trace!("a_range = {:?}, b_range = {:?}", a_range, b_range);
+                        // add the two ranges
+                        let lower_bound =
+                            ConstExpr::Plus(a_range[&0].clone().into(), b_range[&0].clone().into())
+                                .simplify();
+                        let upper_bound =
+                            ConstExpr::Plus(a_range[&1].clone().into(), b_range[&1].clone().into())
+                                .simplify();
+                        Ok((
+                            Expr {
+                                itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
+                                inner: ExprInner::BinOp(BinOp::Add, a_expr.into(), b_expr.into()),
+                            },
+                            TypeFacts::empty(),
+                        ))
+                    } else {
+                        Ok((
+                            Expr {
+                                itype: Type::all_nat(),
+                                inner: ExprInner::BinOp(BinOp::Add, a_expr.into(), b_expr.into()),
+                            },
+                            TypeFacts::empty(),
+                        ))
+                    }
                 }
                 crate::grammar::BinOp::Sub => {
                     check_nats()?;
