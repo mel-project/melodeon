@@ -1,7 +1,7 @@
 use std::{
     fmt::{Debug, Display},
     ops::Deref,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -11,8 +11,6 @@ use std::{
 use dashmap::DashMap;
 use internment::Intern;
 use once_cell::sync::Lazy;
-
-use crate::containers::Symbol;
 
 pub type CtxResult<T> = Result<T, CtxErr>;
 

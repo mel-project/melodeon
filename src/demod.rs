@@ -149,7 +149,11 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         RawExpr::Let(sym, bind, body) => {
             let mut inner_no_mangle = no_mangle.clone();
             inner_no_mangle.insert(*sym);
-            RawExpr::Let(sym, bind, mangle_expr(body, source, &inner_no_mangle))
+            RawExpr::Let(
+                sym,
+                recurse(bind),
+                mangle_expr(body, source, &inner_no_mangle),
+            )
         }
         RawExpr::If(cond, a, b) => RawExpr::If(recurse(cond), recurse(a), recurse(b)),
         RawExpr::BinOp(op, a, b) => RawExpr::BinOp(op, recurse(a), recurse(b)),
@@ -183,6 +187,18 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
             RawExpr::AsType(recurse(a), mangle_type_expr(t, source, no_mangle))
         }
         RawExpr::Fail => RawExpr::Fail,
+        RawExpr::For(sym, bind, body) => {
+            let mut inner_no_mangle = no_mangle.clone();
+            inner_no_mangle.insert(*sym);
+            RawExpr::For(
+                sym,
+                recurse(bind),
+                mangle_expr(body, source, &inner_no_mangle),
+            )
+        }
+        RawExpr::Transmute(a, t) => {
+            RawExpr::Transmute(recurse(a), mangle_type_expr(t, source, no_mangle))
+        }
     }
     .with_ctx(ctx)
 }

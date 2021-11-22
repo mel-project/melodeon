@@ -3,8 +3,19 @@ require "aux.melo"
 def foo<$n>() = succ(0)
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x: {$n+1..$n+1}) = $n
+
+def range<$n>(x: {$n..$n}) =
+    let accum = unsafe transmute [] into [Nat; $n] in
+    let ctr = 0 as Nat in
+    loop $n do
+        set! accum = unsafe transmute accum ++ [ctr] into [Nat; $n]; 
+        set! ctr = ctr + 1
+    done with accum
+
 --- 
-let x = 0 as Nat in
-loop 100 do
-set! x = x + 1 
-done with assert! x is {100} in peel(x)
+#let x = 0 as Nat in
+#loop 100 do
+#set! x = x + 1 
+#done with assert! x is {100} in [peel(x) + i for i in [1, 2, 3, 4, 5]]
+
+[i for i in range(1000)]

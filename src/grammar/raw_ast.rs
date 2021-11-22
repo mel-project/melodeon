@@ -62,6 +62,7 @@ pub enum RawConstExpr {
 #[derive(Clone, Debug)]
 pub enum RawExpr {
     Let(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
+    For(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     If(Ctx<Self>, Ctx<Self>, Ctx<Self>),
     Fail,
 
@@ -82,6 +83,8 @@ pub enum RawExpr {
 
     IsType(Symbol, Ctx<RawTypeExpr>),
     AsType(Ctx<Self>, Ctx<RawTypeExpr>),
+
+    Transmute(Ctx<Self>, Ctx<RawTypeExpr>),
 }
 
 /// Binary operator

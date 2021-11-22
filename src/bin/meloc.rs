@@ -6,9 +6,8 @@ use argh::FromArgs;
 use log::LevelFilter;
 use melodeon_rs::{
     codegen::codegen_program,
-    context::{Ctx, CtxResult, ModuleId, ToCtxErr},
+    context::{CtxResult, ModuleId},
     demod::Demodularizer,
-    grammar::{parse_program, RawProgram},
     typesys::typecheck_program,
 };
 
@@ -42,13 +41,6 @@ fn time_stage<T>(label: &str, action: impl FnOnce() -> T) -> T {
     let res = action();
     log::info!("[{}] took {:?}", label, start.elapsed());
     res
-}
-
-fn preload_module(mid: ModuleId) -> CtxResult<Ctx<RawProgram>> {
-    log::info!("loading module {:?}", mid);
-    let ss = mid.load_file().err_ctx(None)?;
-    let parsed = parse_program(&ss, mid)?;
-    Ok(parsed)
 }
 
 fn init_logs() {

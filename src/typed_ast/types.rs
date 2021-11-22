@@ -25,6 +25,12 @@ pub struct Expr<TVar: Variable = Void, CVar: Variable = Void> {
     pub inner: ExprInner<TVar, CVar>,
 }
 
+impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
+    pub fn new(itype: Type<TVar, CVar>, inner: ExprInner<TVar, CVar>) -> Self {
+        Self { itype, inner }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ExprInner<TVar: Variable, CVar: Variable> {
     BinOp(BinOp, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
@@ -63,6 +69,24 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
         Arc<Expr<TVar, CVar>>,
     ),
     Fail,
+}
+
+impl<TVar: Variable, CVar: Variable> ExprInner<TVar, CVar> {
+    /// Convenience type to wrap in an Expr with the any type
+    pub fn wrap_any(self) -> Expr<TVar, CVar> {
+        Expr {
+            inner: self,
+            itype: Type::Any,
+        }
+    }
+
+    /// Convenience type to wrap in an Expr with the given type
+    pub fn wrap(self, t: Type<TVar, CVar>) -> Expr<TVar, CVar> {
+        Expr {
+            inner: self,
+            itype: t,
+        }
+    }
 }
 
 /// Binary operator

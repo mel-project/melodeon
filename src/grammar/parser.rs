@@ -337,6 +337,14 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .collect();
             RawExpr::LitVec(children).with_ctx(ctx)
         }
+        Rule::for_literal => {
+            let mut children = pair.into_inner();
+            let body = parse_expr(children.next().unwrap(), source);
+            let varname = children.next().unwrap();
+            let varname = Symbol::from(varname.as_str()).with_ctx(p2ctx(&varname, source));
+            let varbind = parse_expr(children.next().unwrap(), source);
+            RawExpr::For(varname, varbind, body).with_ctx(ctx)
+        }
         Rule::cgvar_name => RawExpr::CgVar(Symbol::from(pair.as_str())).with_ctx(ctx),
         Rule::struct_literal => {
             let mut children = pair.into_inner();
@@ -357,6 +365,12 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .map(|c| parse_setbang(c, source))
                 .collect();
             RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx)
+        }
+        Rule::transmute_expr => {
+            let mut children = pair.into_inner();
+            let inner = parse_expr(children.next().unwrap(), source);
+            let t = parse_type_expr(children.next().unwrap(), source);
+            RawExpr::Transmute(inner, t).with_ctx(ctx)
         }
         Rule::EOI => RawExpr::LitNum(U256::from(0u8)).with_ctx(None),
         _ => unreachable!(),

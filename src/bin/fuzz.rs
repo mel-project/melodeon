@@ -2,7 +2,6 @@ use std::path::Path;
 
 use melodeon_rs::{
     codegen::codegen_program,
-    containers::Symbol,
     context::{CtxResult, ModuleId},
     grammar::parse_program,
     typesys::typecheck_program,
@@ -31,4 +30,6 @@ fn test_once(data: &[u8]) -> CtxResult<()> {
 }
 
 #[cfg(not(fuzzing))]
-fn main() {}
+fn main() {
+    test_once(b"").unwrap()
+}

@@ -194,7 +194,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             let result_facts = if x.itype.always_falsy() {
                 not_c_facts.union(y_facts)
             } else if y.itype.always_falsy() {
-                dbg!(c_facts.union(x_facts))
+                c_facts.union(x_facts)
             } else {
                 TypeFacts::empty()
             };
@@ -717,6 +717,105 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             },
             TypeFacts::empty(),
         )),
+        RawExpr::For(sym, val, body) => {
+            let val = recurse(val)?.0;
+            let val_lengths = val.itype.lengths();
+            let (val_inner_length, val_inner_type) = if val_lengths.len() == 1 {
+                (
+                    val_lengths.into_iter().next().unwrap(),
+                    val.itype.index(None).unwrap().into_owned(),
+                )
+            } else {
+                return Err(anyhow::anyhow!(
+                    "list comprehension needs a list with a definite length, got {:?} instead",
+                    val.itype
+                )
+                .with_ctx(ctx));
+            };
+            let body = typecheck_expr(state.bind_var(*sym, val_inner_type.clone()), body)?.0;
+            let temp_counter = Symbol::generate("for_counter");
+            let temp_result = Symbol::generate("for_result");
+            let temp_sym = Symbol::generate("for_variable");
+            let result_type = Type::Vectorof(body.itype.clone().into(), val_inner_length.clone());
+            // desugar into a loop
+            // let counter = 0 in
+            // let result = $val in
+            // loop $val_length
+            //   set! result = let $sym = result[counter] in result[counter => $body]
+            //   set! counter = counter + 1
+            // done with result
+            Ok((
+                Expr {
+                    inner: ExprInner::Let(
+                        temp_counter,
+                        ExprInner::LitNum(0u8.into()).wrap(Type::all_nat()).into(),
+                        ExprInner::Let(
+                            temp_result,
+                            val.clone().into(),
+                            ExprInner::Loop(
+                                val_inner_length,
+                                [
+                                    (
+                                        temp_result,
+                                        ExprInner::Let(
+                                            temp_sym,
+                                            ExprInner::VectorRef(
+                                                ExprInner::Var(temp_result)
+                                                    .wrap(val.itype.clone())
+                                                    .into(),
+                                                ExprInner::Var(temp_counter)
+                                                    .wrap(Type::all_nat())
+                                                    .into(),
+                                            )
+                                            .wrap(val_inner_type)
+                                            .into(),
+                                            ExprInner::VectorUpdate(
+                                                ExprInner::Var(temp_result).wrap(val.itype).into(),
+                                                ExprInner::Var(temp_counter)
+                                                    .wrap(Type::all_nat())
+                                                    .into(),
+                                                body.into(),
+                                            )
+                                            .wrap(result_type.clone())
+                                            .into(),
+                                        )
+                                        .wrap(result_type.clone()),
+                                    ),
+                                    (
+                                        temp_counter,
+                                        ExprInner::BinOp(
+                                            BinOp::Add,
+                                            ExprInner::Var(temp_counter)
+                                                .wrap(Type::all_nat())
+                                                .into(),
+                                            ExprInner::LitNum(1u8.into())
+                                                .wrap(Type::all_nat())
+                                                .into(),
+                                        )
+                                        .wrap(Type::all_nat()),
+                                    ),
+                                ]
+                                .into_iter()
+                                .collect(),
+                                ExprInner::Var(temp_result).wrap(result_type.clone()).into(),
+                            )
+                            .wrap(result_type.clone())
+                            .into(),
+                        )
+                        .wrap(result_type.clone())
+                        .into(),
+                    ),
+                    itype: result_type,
+                },
+                TypeFacts::empty(),
+            ))
+        }
+        RawExpr::Transmute(inner, t) => {
+            let mut inner = recurse(inner)?;
+            let t = typecheck_type_expr(&state, t)?;
+            inner.0.itype = t;
+            Ok(inner)
+        }
     }
 }
 

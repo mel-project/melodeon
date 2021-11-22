@@ -1,5 +1,5 @@
 // "lexer" items
-reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "fail" | "struct" | "require" | "provide"}
+reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "fail" | "struct" | "require" | "provide" | "transmute"}
 nat_literal = @{ ASCII_DIGIT+ }
 type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
 var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
@@ -130,15 +130,19 @@ as_type         = { "as" ~ type_expr }
 
 terminal_expr   = _{
     is_type |
-    cflow_expr |
+    transmute_expr |
     nat_literal |
     cgvar_name |
     var_name |
     vector_literal |
     struct_literal |
+    for_literal |
+    cflow_expr |
     "(" ~ expr ~ ")"
 }
-is_type     = { var_name ~ "is" ~ type_expr }
-vector_literal = { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
-struct_literal = { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }
+is_type     	= { var_name ~ "is" ~ type_expr }
+vector_literal 	= { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
+struct_literal 	= { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }
+for_literal	= { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
+transmute_expr	= { "unsafe" ~ "transmute" ~ expr ~ "into" ~ type_expr }
 

@@ -382,6 +382,16 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
     //         .try_fill_tvars(|c| tvar_tab.get(c).cloned())
     // }
 
+    /// Returns a set of possible lengths of this type.
+    pub fn lengths(&self) -> Set<ConstExpr<CVar>> {
+        match self {
+            Type::Vector(v) => std::iter::once(ConstExpr::from(v.len())).collect(),
+            Type::Vectorof(_, n) => std::iter::once(n.clone()).collect(),
+            Type::Union(t, u) => t.lengths().union(u.lengths()),
+            _ => Set::new(),
+        }
+    }
+
     /// Indexes into this type. None indicates a generalized index.
     pub fn index(&self, idx: Option<&ConstExpr<CVar>>) -> Option<Cow<Self>> {
         match self {
