@@ -228,6 +228,13 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             RawExpr::If(condition, x, y).with_ctx(ctx)
         }
         Rule::fail_expr => RawExpr::Fail.with_ctx(ctx),
+        Rule::assert_expr => {
+            // shallow desugaring
+            let mut children = pair.into_inner().map(|c| parse_expr(c, source));
+            let condition = children.next().unwrap();
+            let x = children.next().unwrap();
+            RawExpr::If(condition, x, RawExpr::Fail.into()).with_ctx(ctx)
+        }
         Rule::let_expr => {
             let mut children = pair.into_inner();
             let var_name = children.next().unwrap();
