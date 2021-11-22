@@ -141,6 +141,7 @@ fn codegen_expr(expr: &Expr) -> Value {
             codegen_expr(res),
         ]
         .sexpr(),
+        ExprInner::Fail => [Value::symbol("fail!")].sexpr(),
     }
 }
 

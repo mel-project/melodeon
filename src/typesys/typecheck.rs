@@ -700,6 +700,13 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 TypeFacts::empty(),
             ))
         }
+        RawExpr::Fail => Ok((
+            Expr {
+                inner: ExprInner::Fail,
+                itype: Type::None,
+            },
+            TypeFacts::empty(),
+        )),
     }
 }
 
@@ -935,6 +942,7 @@ fn monomorphize_inner(
                 body.iter().map(|(s, v)| (*s, recurse(v))).collect(),
                 recurse(&res).into(),
             ),
+            ExprInner::Fail => ExprInner::Fail,
         },
         itype: body
             .itype

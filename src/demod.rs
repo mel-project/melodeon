@@ -182,6 +182,7 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         RawExpr::AsType(a, t) => {
             RawExpr::AsType(recurse(a), mangle_type_expr(t, source, no_mangle))
         }
+        RawExpr::Fail => RawExpr::Fail,
     }
     .with_ctx(ctx)
 }

@@ -62,6 +62,7 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
         List<(Symbol, Expr<TVar, CVar>)>,
         Arc<Expr<TVar, CVar>>,
     ),
+    Fail,
 }
 
 /// Binary operator

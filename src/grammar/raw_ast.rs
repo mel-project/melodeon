@@ -63,6 +63,7 @@ pub enum RawConstExpr {
 pub enum RawExpr {
     Let(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     If(Ctx<Self>, Ctx<Self>, Ctx<Self>),
+    Fail,
 
     BinOp(Ctx<BinOp>, Ctx<RawExpr>, Ctx<RawExpr>),
     LitNum(U256),

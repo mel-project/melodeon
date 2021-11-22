@@ -15,7 +15,7 @@ use melodeon_rs::{
 #[derive(FromArgs)]
 /// Low-level melodeon compiler
 struct Args {
-    #[argh(option)]
+    #[argh(positional)]
     /// input file
     input: String,
 }

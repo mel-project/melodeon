@@ -227,6 +227,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let y = children.next().unwrap();
             RawExpr::If(condition, x, y).with_ctx(ctx)
         }
+        Rule::fail_expr => RawExpr::Fail.with_ctx(ctx),
         Rule::let_expr => {
             let mut children = pair.into_inner();
             let var_name = children.next().unwrap();
