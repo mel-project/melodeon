@@ -2,7 +2,7 @@ use ethnum::U256;
 
 use crate::{
     containers::{List, Map, Set, Symbol},
-    context::Ctx,
+    context::{Ctx, ModuleId},
 };
 
 /// A whole program.
@@ -28,6 +28,8 @@ pub enum RawDefn {
         fields: List<Ctx<RawTypeBind>>,
     },
     Constant(Ctx<Symbol>, Ctx<RawExpr>),
+    Require(ModuleId),
+    Provide(Symbol),
 }
 
 /// A type binding
@@ -103,7 +105,7 @@ pub fn sort_defs(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
     let mut visited = Set::new();
 
     for def in defs.iter() {
-        visit(*def.name(), &defs, &mut sorted, &mut visited);
+        visit(def.name(), &defs, &mut sorted, &mut visited);
     }
 
     sorted
@@ -118,7 +120,7 @@ fn visit(
     if !visited.contains(&def) {
         visited.insert(def);
 
-        let def = find_by_name(defs, &def)
+        let def = find_by_name(defs, def)
             .expect("A parent reference should always be in the definitions list, this is a bug");
 
         for parent in def.parents() {
@@ -146,12 +148,12 @@ fn sort_single_def(
     visited: Set<Symbol>,
 ) -> (List<Ctx<RawDefn>>, Set<Symbol>) {
     let name = def.name();
-    if !visited.contains(name) {
+    if !visited.contains(&name) {
         let (mut sorted, visited) = def.parents().iter().fold(
-            (sorted, visited.update(*name)),
+            (sorted, visited.update(name)),
             |(sorted, visited), parent|
                 sort_single_def(
-                    find_by_name(&defs, parent)
+                    find_by_name(&defs, *parent)
                         .expect("A parent reference should always be in the definitions list, this is a bug").clone(),
                     defs.clone(),
                     sorted,
@@ -164,17 +166,18 @@ fn sort_single_def(
     }
 }
 
-pub fn find_by_name<'a>(defs: &'a List<Ctx<RawDefn>>, name: &Symbol) -> Option<&'a Ctx<RawDefn>> {
+pub fn find_by_name(defs: &List<Ctx<RawDefn>>, name: Symbol) -> Option<&Ctx<RawDefn>> {
     defs.iter().find(|def| def.name() == name)
 }
 
 impl RawDefn {
     /// Get the name of a definition
-    pub fn name(&self) -> &Symbol {
+    pub fn name(&self) -> Symbol {
         match self {
-            RawDefn::Function { name, .. } => name,
-            RawDefn::Struct { name, .. } => name,
-            RawDefn::Constant(name, _) => name,
+            RawDefn::Function { name, .. } => **name,
+            RawDefn::Struct { name, .. } => **name,
+            RawDefn::Constant(name, _) => **name,
+            _ => Symbol::from("undefined"),
         }
     }
 
@@ -186,6 +189,8 @@ impl RawDefn {
                 acc.union(typebind_parents(&field.bind))
             }),
             RawDefn::Constant(_, body) => expr_parents(body),
+            RawDefn::Require(_) => Set::new(),
+            RawDefn::Provide(_) => Set::new(),
         }
     }
 }

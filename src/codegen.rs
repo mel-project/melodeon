@@ -10,6 +10,10 @@ use lexpr::Value;
 
 /// Generates Mil code (in s-expression format) by traversing a fully monomorphized Program.
 pub fn codegen_program(prog: Program) -> String {
+    log::debug!(
+        "generating code for program with {} monomorphized definitions",
+        prog.fun_defs.len()
+    );
     prog.fun_defs
         .iter()
         .map(codegen_fundef)
@@ -293,11 +297,11 @@ fn collect_sexpr(mut i: impl Iterator<Item = lexpr::Value>) -> lexpr::Value {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use log::LevelFilter;
 
-    use crate::{
-        containers::Symbol, context::ModuleId, grammar::parse_program, typesys::typecheck_program,
-    };
+    use crate::{context::ModuleId, grammar::parse_program, typesys::typecheck_program};
 
     use super::*;
 
@@ -311,7 +315,7 @@ mod tests {
     #[test]
     fn simple_codegen() {
         init_logs();
-        let module = ModuleId(Symbol::from("whatever.melo"));
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{}",
             codegen_program(

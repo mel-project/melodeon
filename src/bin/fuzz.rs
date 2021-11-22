@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use melodeon_rs::{
     codegen::codegen_program,
     containers::Symbol,
@@ -20,7 +22,7 @@ fn main() {
 }
 
 fn test_once(data: &[u8]) -> CtxResult<()> {
-    let module = ModuleId(Symbol::from("whatever.melo"));
+    let module = ModuleId::from_path(Path::new("whatever.melo"));
     let data = String::from_utf8_lossy(data);
     log::info!("input string: {:?}", data);
     let res = codegen_program(typecheck_program(parse_program(&data, module)?)?);

@@ -1,0 +1,5 @@
+provide boolayah
+
+def boolayah() = labooyah()
+def labooyah() = noonyanya()
+def noonyanya() = 123

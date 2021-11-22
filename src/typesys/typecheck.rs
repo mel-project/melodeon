@@ -58,6 +58,11 @@ fn assert_subtype<Tv: Variable, Cv: Variable>(
 
 /// Typechecks a whole program, resolving free variables fully.
 pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
+    log::debug!(
+        "typechecking whole program rooted at {:?} with {} defs",
+        raw.ctx().map(|ctx| ctx.source.to_string()),
+        raw.definitions.len()
+    );
     // Topologically sort definitions
     let sorted = sort_defs(raw.definitions.clone());
 
@@ -139,6 +144,12 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                             .collect::<CtxResult<List<_>>>()?,
                     ),
                 );
+            }
+            crate::grammar::RawDefn::Require(_) => {
+                panic!("non-demodularized AST passed into typechecker")
+            }
+            crate::grammar::RawDefn::Provide(_) => {
+                panic!("non-demodularized AST passed into typechecker")
             }
         }
     }
@@ -923,6 +934,8 @@ fn monomorphize_inner(
 #[cfg(test)]
 mod tests {
 
+    use std::path::Path;
+
     use log::LevelFilter;
 
     use super::*;
@@ -932,7 +945,7 @@ mod tests {
     fn typecheck_simple() {
         init_logs();
         let state: TypecheckState<Void, Void> = TypecheckState::new();
-        let module = ModuleId(Symbol::from("whatever.melo"));
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:#?}",
             typecheck_expr(
@@ -946,7 +959,7 @@ mod tests {
     #[test]
     fn typecheck_whole() {
         init_logs();
-        let module = ModuleId(Symbol::from("whatever.melo"));
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:#?}",
             typecheck_program(

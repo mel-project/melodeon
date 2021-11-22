@@ -16,6 +16,7 @@ use super::{RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr
 
 /// Parse a string as an entire program.
 pub fn parse_program(input: &str, source: ModuleId) -> CtxResult<Ctx<RawProgram>> {
+    log::debug!("parsing {} chars at {}", input.len(), source);
     let root_ctx = CtxLocation {
         source,
         start_offset: 0,
@@ -103,6 +104,16 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
                 fields: elems,
             }
             .with_ctx(ctx)
+        }
+        Rule::require => {
+            let ctx = p2ctx(&pair, source);
+            let path = source.relative(pair.into_inner().next().unwrap().into_inner().as_str());
+            RawDefn::Require(path).with_ctx(ctx)
+        }
+        Rule::provide => {
+            let ctx = p2ctx(&pair, source);
+            let name = Symbol::from(pair.into_inner().next().unwrap().as_str());
+            RawDefn::Provide(name).with_ctx(ctx)
         }
         _ => unreachable!(),
     }
@@ -339,6 +350,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .collect();
             RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx)
         }
+        Rule::EOI => RawExpr::LitNum(U256::from(0u8)).with_ctx(None),
         _ => unreachable!(),
     }
 }
@@ -364,6 +376,8 @@ struct RawParser;
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
     use log::LevelFilter;
     #[test]
@@ -376,7 +390,7 @@ mod tests {
                 ---
                 labooyah(1)
             "#,
-                ModuleId("placeholder.melo".into())
+                ModuleId::from_path(Path::new("placeholder.melo"))
             )
             .unwrap()
         );

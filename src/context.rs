@@ -1,4 +1,16 @@
-use std::{fmt::Debug, ops::Deref, sync::Arc};
+use std::{
+    fmt::{Debug, Display},
+    ops::Deref,
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
+
+use dashmap::DashMap;
+use internment::Intern;
+use once_cell::sync::Lazy;
 
 use crate::containers::Symbol;
 
@@ -77,5 +89,48 @@ pub struct CtxLocation {
 }
 
 /// Represents the unique ID of a module.
-#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug)]
-pub struct ModuleId(pub Symbol);
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
+pub struct ModuleId {
+    absolute_path: Intern<String>,
+}
+
+impl Display for ModuleId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.absolute_path, f)
+    }
+}
+
+impl ModuleId {
+    /// Create a new one from a Path.
+    pub fn from_path(path: &Path) -> Self {
+        let canon = path.to_string_lossy().into_owned();
+        ModuleId {
+            absolute_path: Intern::new(canon),
+        }
+    }
+
+    /// A module relative to this module.
+    pub fn relative(self, frag: &str) -> Self {
+        let mut path = Path::new(self.absolute_path.as_str()).to_owned();
+        path.pop();
+        path.push(frag);
+        let new = path.to_string_lossy().into_owned();
+        ModuleId {
+            absolute_path: Intern::new(new),
+        }
+    }
+
+    /// Load as file, fallibly.
+    pub fn load_file(self) -> std::io::Result<String> {
+        std::fs::read_to_string(self.absolute_path.as_str())
+    }
+
+    /// Returns a globally unique ID.
+    pub fn uniqid(self) -> usize {
+        static CACHE: Lazy<DashMap<ModuleId, usize>> = Lazy::new(DashMap::new);
+        static GCOUNTER: AtomicUsize = AtomicUsize::new(0);
+        *CACHE
+            .entry(self)
+            .or_insert_with(|| GCOUNTER.fetch_add(1, Ordering::Relaxed))
+    }
+}
