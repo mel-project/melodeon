@@ -677,7 +677,19 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             let iterations = typecheck_const_expr(&state, iterations)?;
             let body = body
                 .into_iter()
-                .map(|(s, v)| Ok((s, recurse(v)?.0)))
+                .map(|(s, v)| {
+                    let ctx = v.ctx();
+                    let v = recurse(v)?.0;
+                    let s_type = state
+                        .lookup_var(s)
+                        .context(format!("assigning to undefined variable {:?}", s))
+                        .err_ctx(ctx)?;
+                    if !v.itype.subtype_of(&s_type) {
+                        Err(anyhow::anyhow!("assigning value of incompatible type {:?} to variable {:?} of type {:?}", v.itype, s, s_type).with_ctx(ctx))
+                    } else {
+                        Ok((s, v))
+                    }
+                })
                 .collect::<CtxResult<List<_>>>()?;
             let end = recurse(end)?.0;
             Ok((
