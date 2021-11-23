@@ -13,9 +13,7 @@ def range<$n>(x: {$n..$n}) =
     done with accum
 
 --- 
-#let x = 0 as Nat in
-#loop 100 do
-#set! x = x + 1 
-#done with assert! x is {100} in [peel(x) + i for i in [1, 2, 3, 4, 5]]
 
-[i for i in range(1000)]
+#[i for i in range(10)] == for i in range(10) collect i
+for i in range(10) fold accum = 0 with
+    accum + i

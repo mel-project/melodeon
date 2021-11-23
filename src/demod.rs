@@ -199,6 +199,18 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         RawExpr::Transmute(a, t) => {
             RawExpr::Transmute(recurse(a), mangle_type_expr(t, source, no_mangle))
         }
+        RawExpr::ForFold(loop_sym, loop_bind, accum_sym, accum_bind, body) => {
+            let mut inner_no_mangle = no_mangle.clone();
+            inner_no_mangle.insert(*loop_sym);
+            inner_no_mangle.insert(*accum_sym);
+            RawExpr::ForFold(
+                loop_sym,
+                recurse(loop_bind),
+                accum_sym,
+                recurse(accum_bind),
+                mangle_expr(body, source, &inner_no_mangle),
+            )
+        }
     }
     .with_ctx(ctx)
 }

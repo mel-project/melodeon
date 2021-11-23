@@ -1,5 +1,5 @@
 // "lexer" items
-reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "fail" | "struct" | "require" | "provide" | "transmute"}
+reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "fail" | "struct" | "require" | "provide" | "transmute" | "collect" | "with"}
 nat_literal = @{ ASCII_DIGIT+ }
 type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
 var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
@@ -85,9 +85,11 @@ expr = _{
     bin_expr    
 }
 
-cflow_expr = _{ let_expr | if_expr | loop_expr | fail_expr | assert_expr }
+cflow_expr = _{ let_expr | if_expr | loop_expr | fail_expr | assert_expr | fold_expr | for_expr }
 fail_expr = {"fail!"}
 assert_expr = {"assert!" ~ expr ~ "in" ~ expr}
+for_expr = {"for" ~ var_name ~ "in" ~ expr ~ "collect" ~ expr}
+fold_expr = {"for" ~ var_name ~ "in" ~ expr ~ "fold" ~ var_name ~ "=" ~ expr ~ "with" ~ expr} 
 
 let_expr = {
     "let" ~ var_name ~ "=" ~ expr ~ "in" ~ expr

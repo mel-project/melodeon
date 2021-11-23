@@ -440,16 +440,16 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::Vector(v1), Type::Vectorof(t, n)) => Some(Type::Vectorof(
                 t.smart_union(&v1.iter().fold(Type::None, |a, b| a.smart_union(b)))
                     .into(),
-                ConstExpr::Plus(n.clone().into(), Arc::new(v1.len().into())),
+                ConstExpr::Add(n.clone().into(), Arc::new(v1.len().into())),
             )),
             (Type::Vectorof(t, n), Type::Vector(v)) => Some(Type::Vectorof(
                 t.smart_union(&v.iter().fold(Type::None, |a, b| a.smart_union(b)))
                     .into(),
-                ConstExpr::Plus(n.clone().into(), Arc::new(v.len().into())),
+                ConstExpr::Add(n.clone().into(), Arc::new(v.len().into())),
             )),
             (Type::Vectorof(t1, n1), Type::Vectorof(t2, n2)) => Some(Type::Vectorof(
                 t1.smart_union(t2).into(),
-                ConstExpr::Plus(n1.clone().into(), n2.clone().into()),
+                ConstExpr::Add(n1.clone().into(), n2.clone().into()),
             )),
             _ => None,
         }
@@ -721,19 +721,19 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
 /// Represents a rather surface-level const-expression. Polynomial-based canonicalization is not yet here.
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum ConstExpr<CVar: Variable> {
-    Literal(U256),
+    Lit(U256),
     Var(CVar),
-    Plus(Arc<Self>, Arc<Self>),
-    Mult(Arc<Self>, Arc<Self>),
+    Add(Arc<Self>, Arc<Self>),
+    Mul(Arc<Self>, Arc<Self>),
 }
 
 impl<CVar: Variable> Debug for ConstExpr<CVar> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstExpr::Literal(lit) => lit.fmt(f),
+            ConstExpr::Lit(lit) => lit.fmt(f),
             ConstExpr::Var(v) => v.fmt(f),
-            ConstExpr::Plus(a, b) => std::fmt::Display::fmt(&format!("({:?} + {:?})", a, b), f),
-            ConstExpr::Mult(a, b) => std::fmt::Display::fmt(&format!("({:?} * {:?})", a, b), f),
+            ConstExpr::Add(a, b) => std::fmt::Display::fmt(&format!("({:?} + {:?})", a, b), f),
+            ConstExpr::Mul(a, b) => std::fmt::Display::fmt(&format!("({:?} * {:?})", a, b), f),
         }
     }
 }
@@ -775,13 +775,13 @@ impl<CVar: Variable> ConstExpr<CVar> {
         mapping: &mut impl FnMut(&CVar) -> Option<ConstExpr<NewCVar>>,
     ) -> Option<ConstExpr<NewCVar>> {
         match self {
-            ConstExpr::Literal(lit) => Some(ConstExpr::Literal(*lit)),
+            ConstExpr::Lit(lit) => Some(ConstExpr::Lit(*lit)),
             ConstExpr::Var(cvar) => mapping(cvar),
-            ConstExpr::Plus(a, b) => Some(ConstExpr::Plus(
+            ConstExpr::Add(a, b) => Some(ConstExpr::Add(
                 a.try_fill_inner(mapping)?.into(),
                 b.try_fill_inner(mapping)?.into(),
             )),
-            ConstExpr::Mult(a, b) => Some(ConstExpr::Mult(
+            ConstExpr::Mul(a, b) => Some(ConstExpr::Mul(
                 a.try_fill_inner(mapping)?.into(),
                 b.try_fill_inner(mapping)?.into(),
             )),
@@ -791,7 +791,7 @@ impl<CVar: Variable> ConstExpr<CVar> {
     /// Simplifies the const-expr to an equivalent form.
     pub fn simplify(self) -> Self {
         if let Some(num) = self.try_eval() {
-            Self::Literal(num)
+            Self::Lit(num)
         } else {
             self
         }
@@ -801,21 +801,21 @@ impl<CVar: Variable> ConstExpr<CVar> {
     pub fn try_eval(&self) -> Option<U256> {
         match self {
             ConstExpr::Var(_) => None,
-            ConstExpr::Plus(x, y) => Some(x.try_eval()?.wrapping_add(y.try_eval()?)),
-            ConstExpr::Literal(x) => Some(*x),
-            ConstExpr::Mult(x, y) => Some(x.try_eval()?.wrapping_mul(y.try_eval()?)),
+            ConstExpr::Add(x, y) => Some(x.try_eval()?.wrapping_add(y.try_eval()?)),
+            ConstExpr::Lit(x) => Some(*x),
+            ConstExpr::Mul(x, y) => Some(x.try_eval()?.wrapping_mul(y.try_eval()?)),
         }
     }
 
     /// Adds 1
     pub fn add1(&self) -> Self {
-        ConstExpr::Plus(self.clone().into(), Arc::new(1.into()))
+        ConstExpr::Add(self.clone().into(), Arc::new(1.into()))
     }
 
     /// Subtract 1, if possible.
     pub fn sub1(&self) -> Option<Self> {
         let val = self.try_eval()?;
-        Some(ConstExpr::Literal(val.checked_sub(U256::from(1u8))?))
+        Some(ConstExpr::Lit(val.checked_sub(U256::from(1u8))?))
     }
 
     /// Tries to subtract another const-expression.
@@ -835,19 +835,19 @@ impl ConstExpr<Void> {
 
 impl<CVar: Variable> From<i32> for ConstExpr<CVar> {
     fn from(i: i32) -> Self {
-        ConstExpr::Literal((i as u64).into())
+        ConstExpr::Lit((i as u64).into())
     }
 }
 
 impl<CVar: Variable> From<usize> for ConstExpr<CVar> {
     fn from(i: usize) -> Self {
-        ConstExpr::Literal((i as u64).into())
+        ConstExpr::Lit((i as u64).into())
     }
 }
 
 impl<CVar: Variable> From<U256> for ConstExpr<CVar> {
     fn from(i: U256) -> Self {
-        ConstExpr::Literal(i)
+        ConstExpr::Lit(i)
     }
 }
 
@@ -881,7 +881,7 @@ mod tests {
                 ),
                 Type::Vectorof(
                     Type::Var(Symbol::from("U")).into(),
-                    ConstExpr::Plus(Arc::new(1.into()), ConstExpr::Var(Symbol::from("n")).into()),
+                    ConstExpr::Add(Arc::new(1.into()), ConstExpr::Var(Symbol::from("n")).into()),
                 ),
             ]
             .into_iter()
@@ -907,9 +907,9 @@ mod tests {
         init_logs();
         let r1: Type<Symbol, Symbol> = Type::Vectorof(
             Type::Var(Symbol::from("T")).into(),
-            ConstExpr::Plus(
+            ConstExpr::Add(
                 ConstExpr::Var(Symbol::from("n")).into(),
-                ConstExpr::Mult(
+                ConstExpr::Mul(
                     ConstExpr::Var(Symbol::from("n")).into(),
                     ConstExpr::Var(Symbol::from("n")).into(),
                 )

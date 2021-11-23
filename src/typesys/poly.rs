@@ -115,7 +115,7 @@ fn factors(i: U256) -> List<U256> {
 impl<CVar: Variable> From<&ConstExpr<CVar>> for Polynomial<CVar> {
     fn from(cexpr: &ConstExpr<CVar>) -> Self {
         match cexpr {
-            ConstExpr::Literal(v) => Self {
+            ConstExpr::Lit(v) => Self {
                 terms: maplit::btreemap! {
                     maplit::btreemap!{
                     } => *v,
@@ -128,8 +128,8 @@ impl<CVar: Variable> From<&ConstExpr<CVar>> for Polynomial<CVar> {
                     } => 1u8.into(),
                 },
             },
-            ConstExpr::Plus(a, b) => Self::from(a.as_ref()) + Self::from(b.as_ref()),
-            ConstExpr::Mult(a, b) => Self::from(a.as_ref()) * Self::from(b.as_ref()),
+            ConstExpr::Add(a, b) => Self::from(a.as_ref()) + Self::from(b.as_ref()),
+            ConstExpr::Mul(a, b) => Self::from(a.as_ref()) * Self::from(b.as_ref()),
         }
         .tap_mut(|s| s.terms.retain(|_, v| v > &mut U256::from(0u8)))
     }
@@ -140,18 +140,18 @@ impl<CVar: Variable> Into<ConstExpr<CVar>> for Polynomial<CVar> {
         self.terms
             .into_iter()
             .fold(ConstExpr::from(0), |a, (b, coeff)| {
-                ConstExpr::Plus(
+                ConstExpr::Add(
                     a.into(),
-                    ConstExpr::Mult(
+                    ConstExpr::Mul(
                         Arc::new(coeff.into()),
                         b.into_iter()
                             .fold(ConstExpr::from(1), |a, b| {
-                                ConstExpr::Mult(
+                                ConstExpr::Mul(
                                     a.into(),
                                     std::iter::repeat(b.0)
                                         .take(b.1)
                                         .fold(ConstExpr::from(1), |a, b| {
-                                            ConstExpr::Mult(a.into(), ConstExpr::Var(b).into())
+                                            ConstExpr::Mul(a.into(), ConstExpr::Var(b).into())
                                         })
                                         .into(),
                                 )

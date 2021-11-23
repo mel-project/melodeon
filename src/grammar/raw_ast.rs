@@ -63,6 +63,7 @@ pub enum RawConstExpr {
 pub enum RawExpr {
     Let(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     For(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
+    ForFold(Ctx<Symbol>, Ctx<Self>, Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     If(Ctx<Self>, Ctx<Self>, Ctx<Self>),
     Fail,
 

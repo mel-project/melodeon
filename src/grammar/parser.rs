@@ -243,6 +243,25 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let body = parse_expr(children.next().unwrap(), source);
             RawExpr::Let(var_name, var_binding, body).with_ctx(ctx)
         }
+        Rule::for_expr => {
+            let mut children = pair.into_inner();
+            let var_name = children.next().unwrap();
+            let var_name = Symbol::from(var_name.as_str()).with_ctx(p2ctx(&var_name, source));
+            let var_binding = parse_expr(children.next().unwrap(), source);
+            let body = parse_expr(children.next().unwrap(), source);
+            RawExpr::For(var_name, var_binding, body).with_ctx(ctx)
+        }
+        Rule::fold_expr => {
+            let mut children = pair.into_inner();
+            let var_name = children.next().unwrap();
+            let var_name = Symbol::from(var_name.as_str()).with_ctx(p2ctx(&var_name, source));
+            let var_binding = parse_expr(children.next().unwrap(), source);
+            let accum_name = children.next().unwrap();
+            let accum_name = Symbol::from(accum_name.as_str()).with_ctx(p2ctx(&accum_name, source));
+            let accum_binding = parse_expr(children.next().unwrap(), source);
+            let body = parse_expr(children.next().unwrap(), source);
+            RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body).with_ctx(ctx)
+        }
         Rule::rel_expr | Rule::add_expr | Rule::mult_expr => {
             let mut children: Vec<_> = pair.into_inner().collect();
             let mut toret = parse_expr(children.remove(0), source);

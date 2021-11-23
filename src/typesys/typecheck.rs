@@ -18,6 +18,7 @@ use self::{
 };
 
 mod facts;
+mod fold;
 mod state;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -227,10 +228,10 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         log::trace!("a_range = {:?}, b_range = {:?}", a_range, b_range);
                         // add the two ranges
                         let lower_bound =
-                            ConstExpr::Plus(a_range[&0].clone().into(), b_range[&0].clone().into())
+                            ConstExpr::Add(a_range[&0].clone().into(), b_range[&0].clone().into())
                                 .simplify();
                         let upper_bound =
-                            ConstExpr::Plus(a_range[&1].clone().into(), b_range[&1].clone().into())
+                            ConstExpr::Add(a_range[&1].clone().into(), b_range[&1].clone().into())
                                 .simplify();
                         Ok((
                             Expr {
@@ -264,10 +265,10 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     let (a_range, b_range) = check_nats()?;
                     // add the two ranges
                     let lower_bound =
-                        ConstExpr::Mult(a_range[&0].clone().into(), b_range[&0].clone().into())
+                        ConstExpr::Mul(a_range[&0].clone().into(), b_range[&0].clone().into())
                             .simplify();
                     let upper_bound =
-                        ConstExpr::Mult(a_range[&1].clone().into(), b_range[&1].clone().into())
+                        ConstExpr::Mul(a_range[&1].clone().into(), b_range[&1].clone().into())
                             .simplify();
                     Ok((
                         Expr {
@@ -733,9 +734,9 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .with_ctx(ctx));
             };
             let body = typecheck_expr(state.bind_var(*sym, val_inner_type.clone()), body)?.0;
-            let temp_counter = Symbol::generate("for_counter");
-            let temp_result = Symbol::generate("for_result");
-            let temp_sym = Symbol::generate("for_variable");
+            let temp_counter = Symbol::generate("-for-counter");
+            let temp_result = Symbol::generate("-for-result");
+            let temp_sym = Symbol::generate("-for-variable");
             let result_type = Type::Vectorof(body.itype.clone().into(), val_inner_length.clone());
             // desugar into a loop
             // let counter = 0 in
@@ -815,6 +816,18 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             let t = typecheck_type_expr(&state, t)?;
             inner.0.itype = t;
             Ok(inner)
+        }
+        RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body) => {
+            // First, we try the "easy" case, where the body has, straightforwardly, the same type as the accum
+            // Then, the tricky, "inference" case. We "const-genericize" the accumulator, replacing every position where we *can* place a const-generic parameter with a const-generic parameter. For example, [Nat; 0] becomes [{$n..$m}; $q].
+            // Then, we typecheck the body, binding the accumulator variable to the const-genericized type above.
+            // We then unify the body with the const-genericized accumulator type. For example, we may get [{$n+1..$m+1}; $q+1]
+            // Each unification binding then lets us calculate the final type. Each binding is of the form
+            //    $n => (some expression that contains $n, say 2*$n+1)
+            // if the RHS contains any variable other than $n, we fail.
+            // The "diff" each time is then RHS - LHS. If this fails, we fail too.
+            // Then, for N iterations, the final value for $n is $n * diff *
+            todo!()
         }
     }
 }
@@ -910,12 +923,12 @@ fn typecheck_const_expr<Tv: Variable, Cv: Variable>(
             .lookup_cgvar(*s)
             .context("no cgvar")
             .err_ctx(raw.ctx())?),
-        RawConstExpr::Lit(a) => Ok(ConstExpr::Literal(*a)),
-        RawConstExpr::Plus(a, b) => Ok(ConstExpr::Plus(
+        RawConstExpr::Lit(a) => Ok(ConstExpr::Lit(*a)),
+        RawConstExpr::Plus(a, b) => Ok(ConstExpr::Add(
             typecheck_const_expr(state, a.clone())?.into(),
             typecheck_const_expr(state, b.clone())?.into(),
         )),
-        RawConstExpr::Mult(a, b) => Ok(ConstExpr::Mult(
+        RawConstExpr::Mult(a, b) => Ok(ConstExpr::Mul(
             typecheck_const_expr(state, a.clone())?.into(),
             typecheck_const_expr(state, b.clone())?.into(),
         )),
