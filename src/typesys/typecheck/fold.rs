@@ -62,9 +62,11 @@ pub fn solve_recurrence<C: Variable>(
     // First, we ensure that the post_step only has this one variable, and it is of the form n + c
     let diff = post_step
         .checked_sub(&ConstExpr::Var(pre_step))
-        .context("pre_step cannot be subtracted from post_step")?
-        .try_eval()
-        .context("per-step change in constant-generic variable is not constant")?;
+        .context("pre_step cannot be subtracted from post_step")?;
+    let diff = diff.try_eval().context(format!(
+        "per-step change in constant-generic variable is not constant: {:?}",
+        diff
+    ))?;
     // Then we add iterations * diff to initial
     Ok(ConstExpr::Add(
         initial.into(),

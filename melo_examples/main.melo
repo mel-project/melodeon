@@ -12,8 +12,14 @@ def range<$n>(x: {$n..$n}) =
         set! ctr = ctr + 1
     done with accum
 
+def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
+    for i in range($n)
+    fold accum = [] as [[T, U]; 0] with
+        accum ++ [[x[i], y[i]]]
+
+#def enumerate<$n, T>(x: [T; $n]): [[T, Nat]; $n] =
+#    
+
 --- 
 
-#[i for i in range(10)] == for i in range(10) collect i
-for i in range(10) fold accum = [] as [Nat; 0] with
-    accum ++ [i]
+zip([1, 2, 3], [4, 5, 6])

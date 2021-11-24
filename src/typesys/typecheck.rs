@@ -858,6 +858,22 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     cgified_body.itype,
                     pre_post_mapping
                 );
+                if !cgified_body
+                    .itype
+                    .subtype_of(&init_accum_cgified.fill_cvars(|c| {
+                        pre_post_mapping
+                            .get(c)
+                            .cloned()
+                            .unwrap_or_else(|| ConstExpr::Var(c.clone()))
+                    }))
+                {
+                    return Err(anyhow::anyhow!(
+                        "post-iteration type {:?} fundamentally incompatible wth pre-iteration type {:?}",
+                        cgified_body.itype,
+                        init_accum_cgified
+                    )
+                    .with_ctx(ctx));
+                }
                 let all_the_way_mapping = pre_post_mapping
                     .into_iter()
                     .map(|(k, v)| {
