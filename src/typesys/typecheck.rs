@@ -1,7 +1,7 @@
 use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use tap::Tap;
 
 use crate::{
@@ -9,7 +9,11 @@ use crate::{
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
-    typesys::{struct_uniqid, ConstExpr, Type, Variable},
+    typesys::{
+        struct_uniqid,
+        typecheck::fold::{cgify_all_slots, partially_erase_cg, solve_recurrence},
+        ConstExpr, Type, Variable,
+    },
 };
 
 use self::{
@@ -41,7 +45,11 @@ impl Debug for CgParam {
     }
 }
 
-impl Variable for CgParam {}
+impl Variable for CgParam {
+    fn try_from_sym(s: Symbol) -> Option<Self> {
+        Some(Self(s))
+    }
+}
 
 impl Variable for i32 {}
 
@@ -721,18 +729,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         RawExpr::For(sym, val, body) => {
             let val = recurse(val)?.0;
             let val_lengths = val.itype.lengths();
-            let (val_inner_length, val_inner_type) = if val_lengths.len() == 1 {
-                (
-                    val_lengths.into_iter().next().unwrap(),
-                    val.itype.index(None).unwrap().into_owned(),
-                )
-            } else {
-                return Err(anyhow::anyhow!(
-                    "list comprehension needs a list with a definite length, got {:?} instead",
-                    val.itype
-                )
-                .with_ctx(ctx));
-            };
+            let (val_inner_length, val_inner_type) = vector_info(&val).err_ctx(ctx)?;
             let body = typecheck_expr(state.bind_var(*sym, val_inner_type.clone()), body)?.0;
             let temp_counter = Symbol::generate("-for-counter");
             let temp_result = Symbol::generate("-for-result");
@@ -819,16 +816,170 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         }
         RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body) => {
             // First, we try the "easy" case, where the body has, straightforwardly, the same type as the accum
-            // Then, the tricky, "inference" case. We "const-genericize" the accumulator, replacing every position where we *can* place a const-generic parameter with a const-generic parameter. For example, [Nat; 0] becomes [{$n..$m}; $q].
-            // Then, we typecheck the body, binding the accumulator variable to the const-genericized type above.
-            // We then unify the body with the const-genericized accumulator type. For example, we may get [{$n+1..$m+1}; $q+1]
-            // Each unification binding then lets us calculate the final type. Each binding is of the form
-            //    $n => (some expression that contains $n, say 2*$n+1)
-            // if the RHS contains any variable other than $n, we fail.
-            // The "diff" each time is then RHS - LHS. If this fails, we fail too.
-            // Then, for N iterations, the final value for $n is $n * diff *
-            todo!()
+            let init_accum = recurse(accum_binding)?.0;
+            let iterating_list = recurse(var_binding)?.0;
+            let (list_length, list_inner_type) = vector_info(&iterating_list)?;
+            let body_easy_case = typecheck_expr(
+                state
+                    .clone()
+                    .bind_var(*var_name, list_inner_type.clone())
+                    .bind_var(*accum_name, init_accum.itype.clone()),
+                body.clone(),
+            )?
+            .0;
+            let loop_body: Expr<Tv, Cv>;
+            let result_type: Type<Tv, Cv>;
+            if body_easy_case.itype.subtype_of(&init_accum.itype) {
+                log::trace!("**EASY** case for folds");
+                loop_body = body_easy_case;
+                result_type = init_accum.itype.clone();
+            } else {
+                log::trace!("**HARD** case for folds");
+                // Then, the tricky, "inference" case. We "const-genericize" the accumulator, replacing every position where we *can* place a const-generic parameter with a const-generic parameter. For example, [Nat; 0] becomes [{$n..$m}; $q].
+                let new_cgvars = DashSet::new();
+                let init_accum_cgified = cgify_all_slots(&init_accum.itype, || {
+                    let v = Cv::try_from_sym(Symbol::generate("g")).unwrap();
+                    new_cgvars.insert(v.clone());
+                    v
+                });
+                let cgification_mapping =
+                    init_accum_cgified.unify_cvars(&init_accum.itype).unwrap();
+                // Then, we typecheck the body, binding the accumulator variable to the const-genericized type above.
+                let cgified_body = typecheck_expr(
+                    state
+                        .bind_var(*var_name, list_inner_type.clone())
+                        .bind_var(*accum_name, init_accum_cgified.clone()),
+                    body,
+                )?
+                .0;
+                // We then unify the body with the const-genericized accumulator type. For example, we may get [{$n+1..$m+1}; $q+1]
+                let pre_post_mapping = init_accum_cgified.unify_cvars(&cgified_body.itype).context(format!("cannot unify pre-iteration accumulator type {:?} with post-iteration accumulator type {:?}", init_accum_cgified, cgified_body.itype))?;
+                log::trace!(
+                    "pre-iteration {:?}, post-iteration {:?}, mapping {:?}",
+                    init_accum_cgified,
+                    cgified_body.itype,
+                    pre_post_mapping
+                );
+                let all_the_way_mapping = pre_post_mapping
+                    .into_iter()
+                    .map(|(k, v)| {
+                        Ok((
+                            k.clone(),
+                            solve_recurrence(
+                                cgification_mapping[&k].clone(),
+                                k,
+                                v,
+                                list_length.clone(),
+                            )
+                            .err_ctx(ctx)?,
+                        ))
+                    })
+                    .collect::<CtxResult<Map<_, _>>>()?;
+                // Each unification binding then lets us calculate the final type. Each binding is of the form
+                //    $n => (some expression that contains $n, say 2*$n+1)
+                // if the RHS contains any variable other than $n, we fail.
+                // The "diff" each time is then RHS - LHS. If this fails, we fail too.
+                let erased_body = cgified_body.recursive_map(|mut x| {
+                    x.itype = partially_erase_cg(&x.itype, |c| new_cgvars.contains(c));
+                    x
+                });
+                loop_body = erased_body;
+                result_type = init_accum_cgified.fill_cvars(|c| {
+                    if let Some(r) = all_the_way_mapping.get(c) {
+                        r.clone()
+                    } else {
+                        ConstExpr::Var(c.clone())
+                    }
+                });
+                log::trace!("result_type is {:?}", result_type);
+            }
+            // desugar into a loop
+            // let input = $val in
+            // let counter = 0 in
+            // let accum = $init_accum in
+            // loop $val_length
+            //   set! accum = let $sym = input[counter] in $body
+            //   set! counter = counter + 1
+            // done with accum
+            use ExprInner::*;
+            let temp_counter = Symbol::generate("-fold-counter");
+            let temp_sym = Symbol::generate("-fold-variable");
+            let temp_input = Symbol::generate("-fold-input");
+            let loop_inner: List<(Symbol, Expr<Tv, Cv>)> = [
+                (
+                    *accum_name,
+                    ExprInner::Let(
+                        temp_sym,
+                        ExprInner::VectorRef(
+                            ExprInner::Var(temp_input)
+                                .wrap(iterating_list.itype.clone())
+                                .into(),
+                            ExprInner::Var(temp_counter).wrap(Type::all_nat()).into(),
+                        )
+                        .wrap(list_inner_type)
+                        .into(),
+                        loop_body.into(),
+                    )
+                    .wrap_any(),
+                ),
+                (
+                    temp_counter,
+                    ExprInner::BinOp(
+                        crate::typed_ast::BinOp::Add,
+                        Var(temp_counter).wrap(Type::all_nat()).into(),
+                        LitNum(1u8.into()).wrap(Type::all_nat()).into(),
+                    )
+                    .wrap(Type::all_nat())
+                    .into(),
+                ),
+            ]
+            .into_iter()
+            .collect();
+            Ok((
+                Let(
+                    temp_input,
+                    iterating_list.into(),
+                    Let(
+                        temp_counter,
+                        LitNum(0u8.into()).wrap(Type::all_nat()).into(),
+                        Let(
+                            *accum_name,
+                            init_accum.into(),
+                            Loop(
+                                list_length,
+                                loop_inner,
+                                Var(*accum_name).wrap(result_type.clone()).into(),
+                            )
+                            .wrap(result_type.clone())
+                            .into(),
+                        )
+                        .wrap(result_type.clone())
+                        .into(),
+                    )
+                    .wrap(result_type.clone())
+                    .into(),
+                )
+                .wrap(result_type.clone()),
+                TypeFacts::empty(),
+            ))
         }
+    }
+}
+
+fn vector_info<Tv: Variable, Cv: Variable>(
+    val: &Expr<Tv, Cv>,
+) -> anyhow::Result<(ConstExpr<Cv>, Type<Tv, Cv>)> {
+    let val_lengths = val.itype.lengths();
+    if val_lengths.len() == 1 {
+        Ok((
+            val_lengths.into_iter().next().unwrap(),
+            val.itype.index(None).unwrap().into_owned(),
+        ))
+    } else {
+        return Err(anyhow::anyhow!(
+            "list comprehension needs a list with a definite length, got {:?} instead",
+            val.itype
+        ));
     }
 }
 

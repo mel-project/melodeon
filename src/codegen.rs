@@ -214,6 +214,7 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
             ]
             .sexpr()
         }
+        Type::DynVectorof(_) => todo!(),
     }
 }
 
@@ -273,6 +274,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
         Type::Vectorof(_, _) => todo!(),
         Type::Struct(_, _) => todo!(),
         Type::Union(_, _) => todo!(),
+        Type::DynVectorof(_) => todo!(),
     }
 }
 

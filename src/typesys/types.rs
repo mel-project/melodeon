@@ -40,6 +40,7 @@ pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     NatRange(ConstExpr<CVar>, ConstExpr<CVar>),
     Vector(List<Self>),
     Vectorof(Arc<Self>, ConstExpr<CVar>),
+    DynVectorof(Arc<Self>),
     Struct(Symbol, List<(Symbol, Self)>),
     Union(Arc<Self>, Arc<Self>),
 }
@@ -64,6 +65,7 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
             Type::Vectorof(a, b) => std::fmt::Display::fmt(&format!("[{:?}; {:?}]", a, b), f),
             Type::Struct(s, v) => std::fmt::Display::fmt(&format!("!struct({}){:?}", s, v), f),
             Type::Union(t, u) => std::fmt::Display::fmt(&format!("{:?} | {:?}", t, u), f),
+            Type::DynVectorof(t) => std::fmt::Display::fmt(&format!("[{:?};]", t), f),
         }
     }
 }
@@ -87,9 +89,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         log::trace!("checking {:?} <:? {:?}", self, other);
         match (self, other) {
             (Type::None, _) => true,
-            (_, Type::None) => false,
             (_, Type::Any) => true,
-            (Type::Any, _) => false,
             (Type::Union(t, u), anything) => t.subtype_of(anything) && u.subtype_of(anything),
             (Type::Var(x), Type::Var(y)) => x == y,
             (Type::Var(_), Type::Union(t, u)) => {
@@ -97,8 +97,6 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 // But because the LHS here is just a single variable, we cannot further investigate, so we do the best we can.
                 self.subtype_of(t) || self.subtype_of(u)
             }
-            (Type::Var(_), _) => false,
-            (_, Type::Var(_)) => false,
             (Type::NatRange(ax, ay), Type::NatRange(bx, by)) => {
                 (bx.try_eval() == Some(0u8.into()) && by.try_eval() == Some(U256::MAX))
                     || (bx.leq(ax) && ay.leq(by))
@@ -124,19 +122,17 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     self.subtype_of(t) || self.subtype_of(u)
                 }
             }
-            (Type::NatRange(_, _), _) => false,
-            (Type::Vector(_), Type::NatRange(_, _)) => false,
             (Type::Vector(v1), Type::Vector(v2)) => {
                 // pairwise comparison
                 v1.len() == v2.len() && v1.iter().zip(v2.iter()).all(|(v1, v2)| v1.subtype_of(v2))
             }
+            (Type::Vector(v1), Type::DynVectorof(t)) => v1.iter().all(|t1| t1.subtype_of(t)),
             (Type::Vector(v1), Type::Vectorof(v2_all, v2_len)) => v2_len
                 .try_eval()
                 .map(|v2_len| {
                     v2_len == U256::from(v1.len() as u64) && v1.iter().all(|i| i.subtype_of(v2_all))
                 })
                 .unwrap_or(false),
-            (Type::Vector(_), Type::Struct(_, _)) => false,
             (Type::Vector(v1), Type::Union(t, u)) => {
                 // We "look into" the RHS vector. This is more precise than the union rule.
                 // We still apply the union rule first because that's faster and doesn't allocate.
@@ -154,7 +150,6 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         })
                         .unwrap_or(false)
             }
-            (Type::Vectorof(_, _), Type::NatRange(_, _)) => false,
             (Type::Vectorof(v1_all, v1_len), Type::Vector(v2)) => v1_len
                 .try_eval()
                 .map(|v1_len| {
@@ -165,7 +160,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 // equal lengths
                 v1_len.leq(v2_len) && v2_len.leq(v1_len) && v1_all.subtype_of(v2_all)
             }
-            (Type::Vectorof(_, _), Type::Struct(_, _)) => false,
+            (Type::Vectorof(v1_all, _), Type::DynVectorof(v2_all)) => v1_all.subtype_of(v2_all),
             (Type::Vectorof(v1_all, v1_len), Type::Union(t, u)) => {
                 // Similar to elementwise vectors
                 self.subtype_of(t)
@@ -181,12 +176,11 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         })
                         .unwrap_or(false)
             }
-            (Type::Struct(_, _), Type::NatRange(_, _)) => false,
-            (Type::Struct(_, _), Type::Vector(_)) => false,
-            (Type::Struct(_, _), Type::Vectorof(_, _)) => false,
             (Type::Struct(a, _), Type::Struct(b, _)) => a == b,
             // Structs are "atomic", just like individual numbers, so the union rule is in fact precise.
             (Type::Struct(_, _), Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
+            (Type::DynVectorof(v1_all), Type::DynVectorof(v2_all)) => v1_all.subtype_of(v2_all),
+            _ => false,
         }
     }
 
@@ -233,17 +227,22 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             }
             Type::Vectorof(t, n) => {
                 // since the other side cannot possibly be a union (that's handled earlier), the only case where we subtract is if they're also a vectorof.
-                if let Type::Vectorof(their_t, their_n) = other {
-                    if n != their_n {
-                        Cow::Borrowed(self)
-                    } else {
-                        Cow::Owned(Type::Vectorof(
-                            t.subtract(their_t).into_owned().into(),
-                            n.clone(),
-                        ))
+                match other {
+                    Type::Vectorof(their_t, their_n) => {
+                        if n != their_n {
+                            Cow::Borrowed(self)
+                        } else {
+                            Cow::Owned(Type::Vectorof(
+                                t.subtract(their_t).into_owned().into(),
+                                n.clone(),
+                            ))
+                        }
                     }
-                } else {
-                    Cow::Borrowed(self)
+                    Type::DynVectorof(their_t) => Cow::Owned(Type::Vectorof(
+                        t.subtract(their_t).into_owned().into(),
+                        n.clone(),
+                    )),
+                    _ => Cow::Borrowed(self),
                 }
             }
             Type::None => Cow::Borrowed(self),
@@ -276,6 +275,13 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 }
             }
             Type::Struct(_, _) => Cow::Borrowed(self),
+            Type::DynVectorof(t) => {
+                if let Type::DynVectorof(their_t) = other {
+                    Cow::Owned(Type::DynVectorof(t.subtract(their_t).into_owned().into()))
+                } else {
+                    Cow::Borrowed(self)
+                }
+            }
         }
     }
 
@@ -528,6 +534,14 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 Type::Vector(i.iter().map(|a| a.1.clone()).collect()).cvar_locations()
             }
             Type::Union(t, u) => t.cvar_locations().union(u.cvar_locations()),
+            Type::DynVectorof(t) => t
+                .cvar_locations()
+                .into_iter()
+                .map(|mut loc| {
+                    loc.push_front(None);
+                    loc
+                })
+                .collect(),
         }
     }
 
@@ -632,6 +646,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 a.try_fill_tvars_inner(mapping)?.into(),
                 b.try_fill_tvars_inner(mapping)?.into(),
             )),
+            Type::DynVectorof(t) => {
+                Some(Type::DynVectorof(t.try_fill_tvars_inner(mapping)?.into()))
+            }
         }
     }
 
@@ -684,6 +701,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 a.try_fill_cvars_inner(mapping)?.into(),
                 b.try_fill_cvars_inner(mapping)?.into(),
             )),
+            Type::DynVectorof(t) => {
+                Some(Type::DynVectorof(t.try_fill_cvars_inner(mapping)?.into()))
+            }
         }
     }
 

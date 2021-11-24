@@ -15,5 +15,5 @@ def range<$n>(x: {$n..$n}) =
 --- 
 
 #[i for i in range(10)] == for i in range(10) collect i
-for i in range(10) fold accum = 0 with
-    accum + i
+for i in range(10) fold accum = [] as [Nat; 0] with
+    accum ++ [i]

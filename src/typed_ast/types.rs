@@ -29,6 +29,45 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
     pub fn new(itype: Type<TVar, CVar>, inner: ExprInner<TVar, CVar>) -> Self {
         Self { itype, inner }
     }
+
+    /// Unconditionally structure-preserving map.
+    pub fn recursive_map(&self, f: impl Fn(Self) -> Self + Copy) -> Self {
+        let recurse = |o: &Self| o.recursive_map(f);
+        let new_inner = match &self.inner {
+            ExprInner::BinOp(o, a, b) => ExprInner::BinOp(*o, recurse(a).into(), recurse(b).into()),
+            ExprInner::If(c, a, b) => {
+                ExprInner::If(recurse(c).into(), recurse(a).into(), recurse(b).into())
+            }
+            ExprInner::Let(s, b, i) => ExprInner::Let(*s, recurse(b).into(), recurse(i).into()),
+            ExprInner::Apply(f, args) => ExprInner::Apply(*f, args.iter().map(recurse).collect()),
+            ExprInner::ApplyGeneric(f, tg, cg, args) => ExprInner::ApplyGeneric(
+                *f,
+                tg.clone(),
+                cg.clone(),
+                args.iter().map(recurse).collect(),
+            ),
+            ExprInner::VectorRef(v, i) => {
+                ExprInner::VectorRef(recurse(v).into(), recurse(i).into())
+            }
+            ExprInner::VectorUpdate(v, i, x) => {
+                ExprInner::VectorUpdate(recurse(v).into(), recurse(i).into(), recurse(x).into())
+            }
+            ExprInner::VectorSlice(v, i, j) => {
+                ExprInner::VectorSlice(recurse(v).into(), recurse(i).into(), recurse(j).into())
+            }
+            ExprInner::Loop(count, sets, end) => ExprInner::Loop(
+                count.clone(),
+                sets.iter().map(|(a, b)| (*a, recurse(b))).collect(),
+                recurse(end).into(),
+            ),
+            _ => self.inner.clone(),
+        };
+        let nova = Self {
+            inner: new_inner,
+            itype: self.itype.clone(),
+        };
+        f(nova)
+    }
 }
 
 #[derive(Debug, Clone)]

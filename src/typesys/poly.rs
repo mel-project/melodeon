@@ -93,6 +93,7 @@ impl<CVar: Variable> Polynomial<CVar> {
             let w = self.terms.entry(k).or_default();
             *w = w.checked_sub(v)?;
         }
+        self.terms.retain(|_, &mut v| v > 0);
         Some(self)
     }
 }
