@@ -114,6 +114,11 @@ pub fn sort_defs(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
         visit(def.name(), &defs, &mut sorted, &mut visited);
     }
 
+    log::debug!(
+        "definitions sorted: {:?}",
+        sorted.iter().map(|d| d.name()).collect::<Vec<_>>()
+    );
+
     sorted
 }
 
@@ -125,11 +130,13 @@ fn visit(
 ) {
     if !visited.contains(&def) {
         visited.insert(def);
+        log::trace!("visiting {:?}", def);
 
         let def = find_by_name(defs, def)
             .expect(&format!("A parent reference should always be in the definitions list, this is a bug. defs {:?}, trying to find {:?}", defs.iter().map(|d| d.name()).collect::<Vec<_>>(), def));
 
         for parent in def.parents() {
+            log::trace!("{:?} depends on {:?}", def.name(), parent);
             visit(parent, defs, &mut sorted, &mut visited);
         }
 
@@ -137,40 +144,40 @@ fn visit(
     }
 }
 
-pub fn sort_defsx(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
-    // TODO assumes no cycles, will not halt if there are cycles
-    defs.clone()
-        .into_iter()
-        .fold((List::new(), Set::new()), |(sorted, visited), def| {
-            sort_single_def(def, defs.clone(), sorted, visited)
-        })
-        .0
-}
+// pub fn sort_defsx(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
+//     // TODO assumes no cycles, will not halt if there are cycles
+//     defs.clone()
+//         .into_iter()
+//         .fold((List::new(), Set::new()), |(sorted, visited), def| {
+//             sort_single_def(def, defs.clone(), sorted, visited)
+//         })
+//         .0
+// }
 
-fn sort_single_def(
-    def: Ctx<RawDefn>,
-    defs: List<Ctx<RawDefn>>,
-    sorted: List<Ctx<RawDefn>>,
-    visited: Set<Symbol>,
-) -> (List<Ctx<RawDefn>>, Set<Symbol>) {
-    let name = def.name();
-    if !visited.contains(&name) {
-        let (mut sorted, visited) = def.parents().iter().fold(
-            (sorted, visited.update(name)),
-            |(sorted, visited), parent|
-                sort_single_def(
-                    find_by_name(&defs, *parent)
-                        .expect("A parent reference should always be in the definitions list, this is a bug").clone(),
-                    defs.clone(),
-                    sorted,
-                    visited));
+// fn sort_single_def(
+//     def: Ctx<RawDefn>,
+//     defs: List<Ctx<RawDefn>>,
+//     sorted: List<Ctx<RawDefn>>,
+//     visited: Set<Symbol>,
+// ) -> (List<Ctx<RawDefn>>, Set<Symbol>) {
+//     let name = def.name();
+//     if !visited.contains(&name) {
+//         let (mut sorted, visited) = def.parents().iter().fold(
+//             (sorted, visited.update(name)),
+//             |(sorted, visited), parent|
+//                 sort_single_def(
+//                     find_by_name(&defs, *parent)
+//                         .expect("A parent reference should always be in the definitions list, this is a bug").clone(),
+//                     defs.clone(),
+//                     sorted,
+//                     visited));
 
-        sorted.push_back(def);
-        (sorted, visited)
-    } else {
-        (defs, visited)
-    }
-}
+//         sorted.push_back(def);
+//         (sorted, visited)
+//     } else {
+//         (defs, visited)
+//     }
+// }
 
 pub fn find_by_name(defs: &List<Ctx<RawDefn>>, name: Symbol) -> Option<&Ctx<RawDefn>> {
     defs.iter().find(|def| def.name() == name)
@@ -190,9 +197,17 @@ impl RawDefn {
     /// Get a list of all definition names referenced in a definition's body.
     pub fn parents(&self) -> Set<Symbol> {
         match self {
-            RawDefn::Function { args, body, .. } => {
-                expr_parents(body).relative_complement(args.iter().map(|a| *a.name).collect())
-            }
+            RawDefn::Function {
+                args,
+                body,
+                genvars,
+                ..
+            } => expr_parents(body).relative_complement(
+                args.iter()
+                    .map(|a| *a.name)
+                    .chain(genvars.iter().map(|a| **a))
+                    .collect(),
+            ),
             RawDefn::Struct { name: _, fields } => fields.iter().fold(Set::new(), |acc, field| {
                 acc.union(typebind_parents(&field.bind))
             }),
@@ -207,7 +222,16 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
     let rec = typebind_parents;
 
     match tb {
-        RawTypeExpr::Sym(sym) => Set::unit(*sym),
+        RawTypeExpr::Sym(sym) => {
+            if sym == &Symbol::from("Nat")
+                || sym == &Symbol::from("Any")
+                || sym == &Symbol::from("None")
+            {
+                Set::new()
+            } else {
+                Set::unit(*sym)
+            }
+        }
         RawTypeExpr::Union(l, r) => rec(l).union(rec(r)),
         RawTypeExpr::Vector(l) => l.iter().fold(Set::new(), |acc, t| acc.union(rec(t))),
         RawTypeExpr::Vectorof(t, _) => rec(t),
@@ -238,7 +262,21 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::BinOp(_, a, b) => rec(a).union(rec(b)),
         RawExpr::Field(strct, _) => rec(strct),
         RawExpr::LitVec(v) => v.iter().fold(Set::new(), |acc, e| acc.union(rec(e))),
-        // TODO traverse type-defs in IsType
-        _ => Set::new(),
+        RawExpr::For(var, val, body) => rec(val).union(rec(body)).without(var),
+        RawExpr::ForFold(var, val, avar, aval, body) => rec(val)
+            .union(rec(aval))
+            .union(rec(body))
+            .without(var)
+            .without(avar),
+        RawExpr::Fail => Set::new(),
+        RawExpr::LitNum(_) => Set::new(),
+        RawExpr::CgVar(_) => Set::new(),
+        RawExpr::Loop(_, body, inner) => body
+            .iter()
+            .map(|a| rec(&a.1))
+            .fold(Set::new(), |a, b| a.union(b))
+            .union(rec(inner)),
+        RawExpr::IsType(v, t) => Set::unit(*v).union(typebind_parents(t)),
+        RawExpr::AsType(a, t) | RawExpr::Transmute(a, t) => rec(a).union(typebind_parents(t)),
     }
 }
