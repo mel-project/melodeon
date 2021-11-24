@@ -728,12 +728,10 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         )),
         RawExpr::For(sym, val, body) => {
             let val = recurse(val)?.0;
-            let val_lengths = val.itype.lengths();
             let (val_inner_length, val_inner_type) = vector_info(&val).err_ctx(ctx)?;
             let body = typecheck_expr(state.bind_var(*sym, val_inner_type.clone()), body)?.0;
             let temp_counter = Symbol::generate("-for-counter");
             let temp_result = Symbol::generate("-for-result");
-            let temp_sym = Symbol::generate("-for-variable");
             let result_type = Type::Vectorof(body.itype.clone().into(), val_inner_length.clone());
             // desugar into a loop
             // let counter = 0 in
@@ -756,7 +754,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                                     (
                                         temp_result,
                                         ExprInner::Let(
-                                            temp_sym,
+                                            *sym,
                                             ExprInner::VectorRef(
                                                 ExprInner::Var(temp_result)
                                                     .wrap(val.itype.clone())
@@ -903,13 +901,12 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             // done with accum
             use ExprInner::*;
             let temp_counter = Symbol::generate("-fold-counter");
-            let temp_sym = Symbol::generate("-fold-variable");
             let temp_input = Symbol::generate("-fold-input");
             let loop_inner: List<(Symbol, Expr<Tv, Cv>)> = [
                 (
                     *accum_name,
                     ExprInner::Let(
-                        temp_sym,
+                        *var_name,
                         ExprInner::VectorRef(
                             ExprInner::Var(temp_input)
                                 .wrap(iterating_list.itype.clone())
