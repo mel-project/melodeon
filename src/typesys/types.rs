@@ -32,7 +32,7 @@ impl Variable for Symbol {
 /// type that cannot be constructed, so a value of [`Type<Void, Void>`] *statically* guarantees a lack of free variables.
 ///
 /// In general, typechecking code should not directly match against [`Type`]. Instead, use the subtyping and unification methods as needed.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     None,
     Any,
@@ -739,7 +739,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
 }
 
 /// Represents a rather surface-level const-expression. Polynomial-based canonicalization is not yet here.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ConstExpr<CVar: Variable> {
     Lit(U256),
     Var(CVar),
