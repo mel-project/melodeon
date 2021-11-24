@@ -46,6 +46,7 @@ pub enum RawTypeExpr {
     Union(Ctx<Self>, Ctx<Self>),
     Vector(List<Ctx<Self>>),
     Vectorof(Ctx<Self>, Ctx<RawConstExpr>),
+    DynVectorof(Ctx<Self>),
     NatRange(Ctx<RawConstExpr>, Ctx<RawConstExpr>),
 }
 
@@ -126,7 +127,7 @@ fn visit(
         visited.insert(def);
 
         let def = find_by_name(defs, def)
-            .expect("A parent reference should always be in the definitions list, this is a bug");
+            .expect(&format!("A parent reference should always be in the definitions list, this is a bug. defs {:?}, trying to find {:?}", defs.iter().map(|d| d.name()).collect::<Vec<_>>(), def));
 
         for parent in def.parents() {
             visit(parent, defs, &mut sorted, &mut visited);
@@ -189,7 +190,9 @@ impl RawDefn {
     /// Get a list of all definition names referenced in a definition's body.
     pub fn parents(&self) -> Set<Symbol> {
         match self {
-            RawDefn::Function { body, .. } => expr_parents(body),
+            RawDefn::Function { args, body, .. } => {
+                expr_parents(body).relative_complement(args.iter().map(|a| *a.name).collect())
+            }
             RawDefn::Struct { name: _, fields } => fields.iter().fold(Set::new(), |acc, field| {
                 acc.union(typebind_parents(&field.bind))
             }),
@@ -209,6 +212,7 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
         RawTypeExpr::Vector(l) => l.iter().fold(Set::new(), |acc, t| acc.union(rec(t))),
         RawTypeExpr::Vectorof(t, _) => rec(t),
         RawTypeExpr::NatRange(_, _) => Set::new(),
+        RawTypeExpr::DynVectorof(v) => rec(v),
     }
 }
 

@@ -46,6 +46,6 @@ fn time_stage<T>(label: &str, action: impl FnOnce() -> T) -> T {
 fn init_logs() {
     let _ = env_logger::builder()
         .format_timestamp(None)
-        .filter_level(LevelFilter::Debug)
+        .filter_level(LevelFilter::Trace)
         .try_init();
 }

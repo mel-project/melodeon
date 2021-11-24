@@ -15,10 +15,9 @@ def range<$n>(x: {$n..$n}) =
 def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
     for i in range($n)
     fold accum = [] as [[T, U]; 0] with
-        accum ++ [[x[i], y[i]]]
+        accum ++ [[unsafe_idx(x, i), unsafe_idx(y, i)]]
 
-#def enumerate<$n, T>(x: [T; $n]): [[T, Nat]; $n] =
-#    
+def unsafe_idx<T>(x: [T;], i: Nat) = (unsafe transmute x into [T; 1])[unsafe transmute i into {0}]
 
 --- 
 

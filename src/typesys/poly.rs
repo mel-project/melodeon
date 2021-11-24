@@ -9,7 +9,7 @@ use std::{
 use ethnum::U256;
 use tap::Tap;
 
-use crate::containers::List;
+use crate::containers::{List, Set};
 
 use super::{ConstExpr, Variable};
 
@@ -28,10 +28,6 @@ impl<CVar: Variable> Polynomial<CVar> {
 
     /// Finds all integers that when plugged into the polynomial, produce rhs.
     pub fn solve(&self, rhs: U256) -> List<U256> {
-        if rhs > U256::from(u16::MAX) {
-            log::warn!("cannot solve polynomials at huge values yet");
-            return List::new();
-        }
         log::trace!("solving {:?} = {}", self, rhs);
         if self.terms.keys().any(|b| b.len() > 1) || !self.terms.keys().any(|b| b.len() == 1) {
             log::trace!("cannot solve multivariate polynomial");
@@ -60,7 +56,9 @@ impl<CVar: Variable> Polynomial<CVar> {
                 .map(|p| qq.iter().copied().map(move |q| (p, q)))
                 .flatten()
                 .chain(std::iter::once((0u8.into(), 1u8.into())))
+                .chain(std::iter::once((rhs, 1u8.into())))
                 .filter_map(|(p, q)| {
+                    log::trace!("trying p={}, q={}", p, q);
                     let r = p / q;
                     if p % q != 0 {
                         None
@@ -70,6 +68,8 @@ impl<CVar: Variable> Polynomial<CVar> {
                         None
                     }
                 })
+                .collect::<Set<_>>()
+                .into_iter()
                 .collect()
         }
     }
@@ -103,7 +103,7 @@ fn factors(i: U256) -> List<U256> {
     let mut toret = List::new();
     let mut d = U256::from(1u8);
     loop {
-        if d > i {
+        if d > i.min(U256::from(4096u32)) {
             return toret;
         }
         if i % d == 0 {
@@ -183,7 +183,6 @@ impl<CVar: Variable> PartialOrd<Self> for Polynomial<CVar> {
     fn le(&self, other: &Self) -> bool {
         log::trace!("comparing {:?} <=? {:?}", self, other);
         self.terms.iter().all(|(k, v)| {
-            log::trace!("lt {:?}", k);
             let ov = other.terms.get(k).copied().unwrap_or_default();
             v <= &ov
         })
@@ -194,7 +193,8 @@ impl<CVar: Variable> Add<Self> for Polynomial<CVar> {
     type Output = Self;
     fn add(mut self, rhs: Self) -> Self::Output {
         for (k, v) in rhs.terms {
-            *self.terms.entry(k).or_default() += v;
+            let r = self.terms.entry(k).or_default();
+            *r = r.wrapping_add(v);
         }
         self
     }

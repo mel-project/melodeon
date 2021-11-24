@@ -1022,7 +1022,7 @@ fn type_vector_ref<Tv: Variable, Cv: Variable>(
         "vector index of type {:?} has no upper bound",
         itype
     ))?;
-    if !i_upper_bound.add1().leq(&v_length) {
+    if !i_upper_bound.le(&v_length) {
         Err(anyhow::anyhow!(
             "cannot index into vector {:?} of length {:?} with something of type {:?}",
             vtype,
@@ -1074,6 +1074,10 @@ fn typecheck_type_expr<Tv: Variable, Cv: Variable>(
             let a = typecheck_const_expr(state, a)?;
             let b = typecheck_const_expr(state, b)?;
             Ok(Type::NatRange(a, b))
+        }
+        RawTypeExpr::DynVectorof(v) => {
+            let v = typecheck_type_expr(state, v)?;
+            Ok(Type::DynVectorof(v.into()))
         }
     }
 }

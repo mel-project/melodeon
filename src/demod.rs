@@ -259,6 +259,7 @@ fn mangle_type_expr(
             mangle_const_expr(i, source, no_mangle),
             mangle_const_expr(j, source, no_mangle),
         ),
+        RawTypeExpr::DynVectorof(v) => RawTypeExpr::DynVectorof(recurse(v)),
     }
     .with_ctx(bind.ctx())
 }

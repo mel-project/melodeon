@@ -295,7 +295,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         let locations = self.tvar_locations();
         log::trace!("found locations: {:?}", locations);
         // Then, we index into other to find out what concrete types those tvars represent
-        locations
+        let res = locations
             .into_iter()
             .map(|(var, locations)| {
                 locations
@@ -310,7 +310,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     })
                     .map(|other_piece| (var, other_piece))
             })
-            .collect()
+            .collect();
+        log::trace!("post unify: {:?}", res);
+        res
     }
 
     /// Similar to [`Type::unify_tvars`], but for const-generic variables instead.
@@ -375,7 +377,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 ),
             }
         }
-        // 19:13 98.5
+        log::trace!("post cg-unify: {:?}", accum);
         Some(accum)
     }
 
@@ -570,7 +572,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 }
                 mapping
             }
-            Type::Vectorof(t, _) => {
+            Type::Vectorof(t, _) | Type::DynVectorof(t) => {
                 let inner_map = t.tvar_locations();
                 inner_map
                     .into_iter()
@@ -772,6 +774,11 @@ impl<CVar: Variable> ConstExpr<CVar> {
     /// Partial order relation
     pub fn leq(&self, other: &Self) -> bool {
         self == other || Polynomial::from(self) <= Polynomial::from(other)
+    }
+
+    /// Partial order relation
+    pub fn le(&self, other: &Self) -> bool {
+        self.leq(other) && !other.leq(self)
     }
 
     /// Fills in the free variables fallibly, given a mapping.

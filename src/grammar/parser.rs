@@ -159,6 +159,11 @@ fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
             let length = parse_const_expr(children.next().unwrap(), source);
             RawTypeExpr::Vectorof(inner_type, length).with_ctx(ctx)
         }
+        Rule::type_dynvectorof => {
+            let mut children = pair.into_inner();
+            let inner_type = parse_type_expr(children.next().unwrap(), source);
+            RawTypeExpr::DynVectorof(inner_type).with_ctx(ctx)
+        }
         Rule::type_name => RawTypeExpr::Sym(Symbol::from(pair.as_str())).with_ctx(ctx),
         Rule::type_natrange => {
             let mut children = pair.into_inner();
