@@ -19,10 +19,36 @@ pub fn codegen_program(prog: Program) -> String {
         .map(codegen_fundef)
         .chain(std::iter::once(codegen_expr(&prog.body)))
         .fold(String::new(), |mut a, b| {
-            a.push_str(&b.to_string());
+            a.push_str(&sexpr_pretty(&b));
             a.push('\n');
             a
         })
+}
+
+/// Trivial pretty-printer for an s-expression
+fn sexpr_pretty(v: &Value) -> String {
+    let unpretty = v.to_string();
+    if unpretty.len() < 50 {
+        return unpretty;
+    }
+    if let Some(mut inner) = v.list_iter() {
+        let form_name = inner.next().unwrap().to_string();
+        let mut accum = format!("({}", form_name);
+        for inner in inner {
+            let inner_str = sexpr_pretty(inner);
+            for line in inner_str.lines() {
+                if accum.len() > 10 {
+                    accum.push('\n');
+                }
+                accum.push(' ');
+                accum.push_str(line)
+            }
+        }
+        accum.push(')');
+        accum
+    } else {
+        unpretty
+    }
 }
 
 fn codegen_fundef(fdef: &FunDefn) -> Value {

@@ -1167,7 +1167,7 @@ fn monomorphize_inner(
                     static MANGLE_COUNT: AtomicUsize = AtomicUsize::new(0);
                     Symbol::from(
                         format!(
-                            "{:?}_mm{}",
+                            "{:?}-mm{}",
                             f,
                             MANGLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                         )
