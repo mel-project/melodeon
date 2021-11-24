@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Deref};
+use std::{fmt::Debug, ops::Deref, sync::atomic::AtomicUsize};
 
 use anyhow::Context;
 use dashmap::{DashMap, DashSet};
@@ -1161,15 +1161,20 @@ fn monomorphize_inner(
             }
             ExprInner::ApplyGeneric(f, tvars, cvars, args) => {
                 // generate a monomorphized version
-                let mangler = blake3::hash(format!("{:?}_{:?}", tvars, cvars).as_bytes()).to_hex()
-                    [..16]
-                    .to_string();
                 let mangled_name = if tvars.is_empty() && cvars.is_empty() {
                     f
                 } else {
-                    Symbol::from(format!("{:?}_{}", f, mangler).as_str())
+                    static MANGLE_COUNT: AtomicUsize = AtomicUsize::new(0);
+                    Symbol::from(
+                        format!(
+                            "{:?}_mm{}",
+                            f,
+                            MANGLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                        )
+                        .as_str(),
+                    )
                 };
-                log::trace!("making up a mangled name {:?}!", mangled_name);
+                log::debug!("making up a mangled name {:?}!", mangled_name);
                 // if we have a monomorphized version already, we just call that.
                 // otherwise, we must populate the table now
                 if mangled.get(&mangled_name).is_none() {
