@@ -211,6 +211,7 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
                 mangle_expr(body, source, &inner_no_mangle),
             )
         }
+        RawExpr::LitBytes(b) => RawExpr::LitBytes(b),
     }
     .with_ctx(ctx)
 }
@@ -260,6 +261,8 @@ fn mangle_type_expr(
             mangle_const_expr(j, source, no_mangle),
         ),
         RawTypeExpr::DynVectorof(v) => RawTypeExpr::DynVectorof(recurse(v)),
+        RawTypeExpr::Bytes(n) => RawTypeExpr::Bytes(mangle_const_expr(n, source, no_mangle)),
+        RawTypeExpr::DynBytes => RawTypeExpr::DynBytes,
     }
     .with_ctx(bind.ctx())
 }

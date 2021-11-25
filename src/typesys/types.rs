@@ -41,6 +41,8 @@ pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
     Vector(List<Self>),
     Vectorof(Arc<Self>, ConstExpr<CVar>),
     DynVectorof(Arc<Self>),
+    Bytes(ConstExpr<CVar>),
+    DynBytes,
     Struct(Symbol, List<(Symbol, Self)>),
     Union(Arc<Self>, Arc<Self>),
 }
@@ -66,6 +68,8 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
             Type::Struct(s, v) => std::fmt::Display::fmt(&format!("!struct({}){:?}", s, v), f),
             Type::Union(t, u) => std::fmt::Display::fmt(&format!("{:?} | {:?}", t, u), f),
             Type::DynVectorof(t) => std::fmt::Display::fmt(&format!("[{:?};]", t), f),
+            Type::Bytes(t) => std::fmt::Display::fmt(&format!("%[{:?}]", t), f),
+            Type::DynBytes => std::fmt::Display::fmt("%[]", f),
         }
     }
 }
@@ -90,6 +94,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         match (self, other) {
             (Type::None, _) => true,
             (_, Type::Any) => true,
+            (Type::Any, _) => false,
             (Type::Union(t, u), anything) => t.subtype_of(anything) && u.subtype_of(anything),
             (Type::Var(x), Type::Var(y)) => x == y,
             (Type::Var(_), Type::Union(t, u)) => {
@@ -97,6 +102,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 // But because the LHS here is just a single variable, we cannot further investigate, so we do the best we can.
                 self.subtype_of(t) || self.subtype_of(u)
             }
+            (Type::Var(_), _) => false,
             (Type::NatRange(ax, ay), Type::NatRange(bx, by)) => {
                 (bx.try_eval() == Some(0u8.into()) && by.try_eval() == Some(U256::MAX))
                     || (bx.leq(ax) && ay.leq(by))
@@ -122,6 +128,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     self.subtype_of(t) || self.subtype_of(u)
                 }
             }
+            (Type::NatRange(_, _), _) => false,
             (Type::Vector(v1), Type::Vector(v2)) => {
                 // pairwise comparison
                 v1.len() == v2.len() && v1.iter().zip(v2.iter()).all(|(v1, v2)| v1.subtype_of(v2))
@@ -150,6 +157,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         })
                         .unwrap_or(false)
             }
+            (Type::Vector(_), _) => false,
             (Type::Vectorof(v1_all, v1_len), Type::Vector(v2)) => v1_len
                 .try_eval()
                 .map(|v1_len| {
@@ -176,11 +184,23 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         })
                         .unwrap_or(false)
             }
+            (Type::Vectorof(_, _), _) => false,
             (Type::Struct(a, _), Type::Struct(b, _)) => a == b,
             // Structs are "atomic", just like individual numbers, so the union rule is in fact precise.
             (Type::Struct(_, _), Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
             (Type::DynVectorof(v1_all), Type::DynVectorof(v2_all)) => v1_all.subtype_of(v2_all),
-            _ => false,
+            (Type::DynVectorof(_), Type::Union(t, u)) => {
+                // conservatively deal with this
+                self.subtype_of(t) || self.subtype_of(u)
+            }
+            (Type::DynVectorof(_), _) => false,
+            (Type::Bytes(n), Type::Bytes(m)) => n.leq(m) && m.leq(n),
+            (Type::Bytes(_), Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
+            (Type::Bytes(_), _) => false,
+            (Type::DynBytes, Type::DynBytes) => true,
+            (Type::DynBytes, Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
+            (Type::DynBytes, _) => false,
+            (Type::Struct(_, _), _) => false,
         }
     }
 
@@ -282,6 +302,8 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     Cow::Borrowed(self)
                 }
             }
+            Type::Bytes(_) => Cow::Borrowed(self),
+            Type::DynBytes => Cow::Borrowed(self),
         }
     }
 
@@ -338,42 +360,43 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     accum.insert(ax, bx);
                     accum.insert(ay, by);
                 }
-                (
-                    Type::NatRange(ax, ay),
-                    Type::NatRange(bx, by),
-                ) => {
-                    if let Some((bx, by)) = bx.try_eval().and_then(|bx| Some((bx, by.try_eval()?))) {
+                (Type::NatRange(ax, ay), Type::NatRange(bx, by)) => {
+                    if let Some((bx, by)) = bx.try_eval().and_then(|bx| Some((bx, by.try_eval()?)))
+                    {
                         // solve the polynomials
-                        let t  = Polynomial::from(&ax).solve(bx);
+                        let t = Polynomial::from(&ax).solve(bx);
                         if t.len() == 1 {
                             accum.insert(ax.cvars()[0].clone(), t[0].into());
                         }
-                        let t  = Polynomial::from(&ay).solve(by);
+                        let t = Polynomial::from(&ay).solve(by);
                         if t.len() == 1 {
                             accum.insert(ay.cvars()[0].clone(), t[0].into());
                         }
                     }
                 }
-                (Type::Vectorof(_, ConstExpr::Var(var)), Type::Vectorof(_, real)) => {
+                (Type::Vectorof(_, ConstExpr::Var(var)), Type::Vectorof(_, real))
+                | (Type::Bytes(ConstExpr::Var(var)), Type::Bytes(real)) => {
                     accum.insert(var, real);
-                },
-                (Type::Vectorof(_, var), Type::Vectorof(_, real)) => {
+                }
+                (Type::Vectorof(_, var), Type::Vectorof(_, real))
+                | (Type::Bytes(var), Type::Bytes(real)) => {
                     if let Some(real) = real.try_eval() {
                         let t = Polynomial::from(&var).solve(real);
                         if t.len() == 1 {
                             accum.insert(var.cvars()[0].clone(), t[0].into());
                         }
                     }
-                },
+                }
                 (Type::Vectorof(_, var), Type::Vector(v)) => {
                     let solns = Polynomial::from(&var).solve((v.len() as u64).into());
                     if solns.len() == 1 {
                         accum.insert(var.cvars()[0].clone(), solns[0].into());
                     }
                 }
-                 (a, b) => log::warn!(
-                    "does not yet support nontrivial const-generic variables (matching {:?} with {:?})",
-                    a, b
+                (a, b) => log::warn!(
+                    "does not yet support cg-unification of {:?} with {:?}",
+                    a,
+                    b
                 ),
             }
         }
@@ -459,6 +482,14 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 t1.smart_union(t2).into(),
                 ConstExpr::Add(n1.clone().into(), n2.clone().into()),
             )),
+            (Type::Vectorof(t1, _) | Type::DynVectorof(t1), Type::DynVectorof(t2))
+            | (Type::DynVectorof(t1), Type::Vectorof(t2, _)) => {
+                Some(Type::DynVectorof(t2.smart_union(t1).into()))
+            }
+            (Type::Bytes(n1), Type::Bytes(n2)) => Some(Type::Bytes(ConstExpr::Add(
+                n1.clone().into(),
+                n2.clone().into(),
+            ))),
             _ => None,
         }
     }
@@ -544,6 +575,8 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     loc
                 })
                 .collect(),
+            Type::Bytes(_) => [List::new()].into_iter().collect(),
+            Type::DynBytes => Set::new(),
         }
     }
 
@@ -651,6 +684,8 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             Type::DynVectorof(t) => {
                 Some(Type::DynVectorof(t.try_fill_tvars_inner(mapping)?.into()))
             }
+            Type::Bytes(n) => Some(Type::Bytes(n.clone())),
+            Type::DynBytes => Some(Type::DynBytes),
         }
     }
 
@@ -706,6 +741,8 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             Type::DynVectorof(t) => {
                 Some(Type::DynVectorof(t.try_fill_cvars_inner(mapping)?.into()))
             }
+            Type::Bytes(b) => Some(Type::Bytes(b.try_fill(mapping)?)),
+            Type::DynBytes => Some(Type::DynBytes),
         }
     }
 

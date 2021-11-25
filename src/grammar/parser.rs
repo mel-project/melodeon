@@ -1,6 +1,7 @@
 use std::{cell::Cell, collections::VecDeque};
 
 use anyhow::Context;
+use bytes::Bytes;
 use ethnum::U256;
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
@@ -23,7 +24,27 @@ pub fn parse_program(input: &str, source: ModuleId) -> CtxResult<Ctx<RawProgram>
         end_offset: 0,
     };
     let pair = RawParser::parse(Rule::program, input)
-        .err_ctx(Some(root_ctx))?
+        .map_err(|err| {
+            let location = err.location.clone();
+            let (start_offset, end_offset) = match location {
+                pest::error::InputLocation::Pos(p) => (p, p),
+                pest::error::InputLocation::Span(p) => p,
+            };
+            let message = err
+                .to_string()
+                .lines()
+                .last()
+                .unwrap()
+                .trim()
+                .trim_start_matches('=')
+                .trim()
+                .to_string();
+            anyhow::anyhow!("{}", message).with_ctx(CtxLocation {
+                source,
+                start_offset,
+                end_offset,
+            })
+        })?
         .next()
         .context("no pairs produced by parser")
         .err_ctx(Some(root_ctx))?;
@@ -174,6 +195,11 @@ fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
                 .unwrap_or_else(|| left.clone());
             RawTypeExpr::NatRange(left, right).with_ctx(ctx)
         }
+        Rule::type_bytes => {
+            let inner = parse_const_expr(pair.into_inner().next().unwrap(), source);
+            RawTypeExpr::Bytes(inner).with_ctx(ctx)
+        }
+        Rule::type_dynbytes => RawTypeExpr::DynBytes.with_ctx(ctx),
         _ => unreachable!(),
     }
 }
@@ -395,6 +421,16 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let inner = parse_expr(children.next().unwrap(), source);
             let t = parse_type_expr(children.next().unwrap(), source);
             RawExpr::Transmute(inner, t).with_ctx(ctx)
+        }
+        Rule::string_literal => {
+            let true_repr = snailquote::unescape(pair.as_str()).unwrap();
+            RawExpr::LitBytes(Bytes::copy_from_slice(true_repr.as_bytes())).with_ctx(ctx)
+        }
+        Rule::hex_literal => {
+            let inner = pair.as_str();
+            let inner = &inner[2..inner.len() - 2];
+            let decoded = hex::decode(inner).unwrap();
+            RawExpr::LitBytes(decoded.into()).with_ctx(ctx)
         }
         Rule::EOI => RawExpr::LitNum(U256::from(0u8)).with_ctx(None),
         _ => unreachable!(),

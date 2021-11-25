@@ -1,5 +1,7 @@
 require "aux.melo"
 
+# require <aux.melo>
+
 def foo<$n>() = succ(0)
 def succ<$n>(x: {$n..$n}) = $n + 1
 def peel<$n>(x: {$n+1..$n+1}) = $n
@@ -21,6 +23,8 @@ def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
 
 def unsafe_idx<T>(x: [T;], i: Nat) = (unsafe transmute x into [T; 1])[unsafe transmute i into {0}]
 
+def g(x: %[5]) = x[0]
+
 --- 
 
-enumerate(enumerate([1, 2, 3, 4, 5]))
+g("hello")

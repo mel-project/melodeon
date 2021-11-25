@@ -168,6 +168,7 @@ fn codegen_expr(expr: &Expr) -> Value {
         ]
         .sexpr(),
         ExprInner::Fail => [Value::symbol("fail!")].sexpr(),
+        ExprInner::LitBytes(b) => Value::symbol(format!("0x{}", hex::encode(&b))),
     }
 }
 
@@ -241,6 +242,8 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
             .sexpr()
         }
         Type::DynVectorof(_) => todo!(),
+        Type::Bytes(_) => todo!(),
+        Type::DynBytes => todo!(),
     }
 }
 
@@ -301,6 +304,8 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
         Type::Struct(_, _) => todo!(),
         Type::Union(_, _) => todo!(),
         Type::DynVectorof(_) => todo!(),
+        Type::Bytes(_) => todo!(),
+        Type::DynBytes => todo!(),
     }
 }
 

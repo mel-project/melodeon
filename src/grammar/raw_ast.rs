@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use ethnum::U256;
 
 use crate::{
@@ -47,6 +48,8 @@ pub enum RawTypeExpr {
     Vector(List<Ctx<Self>>),
     Vectorof(Ctx<Self>, Ctx<RawConstExpr>),
     DynVectorof(Ctx<Self>),
+    Bytes(Ctx<RawConstExpr>),
+    DynBytes,
     NatRange(Ctx<RawConstExpr>, Ctx<RawConstExpr>),
 }
 
@@ -70,6 +73,8 @@ pub enum RawExpr {
 
     BinOp(Ctx<BinOp>, Ctx<RawExpr>, Ctx<RawExpr>),
     LitNum(U256),
+    LitBytes(Bytes),
+
     LitVec(List<Ctx<Self>>),
     LitStruct(Symbol, Map<Symbol, Ctx<RawExpr>>),
     Var(Symbol),
@@ -237,6 +242,8 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
         RawTypeExpr::Vectorof(t, _) => rec(t),
         RawTypeExpr::NatRange(_, _) => Set::new(),
         RawTypeExpr::DynVectorof(v) => rec(v),
+        RawTypeExpr::Bytes(_) => Set::new(),
+        RawTypeExpr::DynBytes => Set::new(),
     }
 }
 
@@ -278,5 +285,6 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
             .union(rec(inner)),
         RawExpr::IsType(v, t) => Set::unit(*v).union(typebind_parents(t)),
         RawExpr::AsType(a, t) | RawExpr::Transmute(a, t) => rec(a).union(typebind_parents(t)),
+        RawExpr::LitBytes(_) => Set::new(),
     }
 }

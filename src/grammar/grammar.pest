@@ -66,11 +66,15 @@ type_terminal = _{
     type_vectorof           |
     type_name               |
     type_natrange           |
+    type_bytes              |
+    type_dynbytes           |
     "(" ~ type_expr ~ ")"  
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" } 
 type_vectorof = { "[" ~ type_expr ~ ";" ~ const_expr ~ "]" }
 type_dynvectorof = { "[" ~ type_expr ~ ";" ~ "]" }
+type_bytes = {"%[" ~ const_expr ~ "]" }
+type_dynbytes = {"%[" ~ "]" }
 type_natrange = { "{" ~ const_expr ~ (".." ~ const_expr)? ~ "}" }
 
 // const-expr. A precedence tower, similar to the bin-expr one.
@@ -142,11 +146,13 @@ terminal_expr   = _{
     struct_literal |
     for_literal |
     cflow_expr |
+    hex_literal |
+    string_literal |
     "(" ~ expr ~ ")"
 }
 is_type     	= { var_name ~ "is" ~ type_expr }
 vector_literal 	= { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
 struct_literal 	= { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }
+hex_literal = ${ "x\"" ~ (ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT)* ~ "\""}
 for_literal	= { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
 transmute_expr	= { "unsafe" ~ "transmute" ~ expr ~ "into" ~ type_expr }
-

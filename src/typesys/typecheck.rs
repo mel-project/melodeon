@@ -494,7 +494,9 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         RawExpr::VectorRef(v, i) => {
             let (v, _) = recurse(v)?;
             let (i, _) = recurse(i)?;
-            let restype = type_vector_ref(&v.itype, &i.itype).err_ctx(ctx)?;
+            let restype = type_vector_ref(&v.itype, &i.itype)
+                .or_else(|_| type_bytes_ref(&v.itype, &i.itype))
+                .err_ctx(ctx)?;
             Ok((
                 Expr {
                     itype: restype,
@@ -976,6 +978,13 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 TypeFacts::empty(),
             ))
         }
+        RawExpr::LitBytes(b) => {
+            let blen = b.len().into();
+            Ok((
+                ExprInner::LitBytes(b).wrap(Type::Bytes(blen)),
+                TypeFacts::empty(),
+            ))
+        }
     }
 }
 
@@ -993,6 +1002,39 @@ fn vector_info<Tv: Variable, Cv: Variable>(
             "list comprehension needs a list with a definite length, got {:?} instead",
             val.itype
         ));
+    }
+}
+
+fn type_bytes_ref<Tv: Variable, Cv: Variable>(
+    vtype: &Type<Tv, Cv>,
+    itype: &Type<Tv, Cv>,
+) -> anyhow::Result<Type<Tv, Cv>> {
+    // first, we unify the vector to [Any; n] in order to get the length
+    let v_length = Type::<Void, Symbol>::Bytes(ConstExpr::Var(Symbol::from("n")))
+        .unify_cvars(vtype)
+        .and_then(|h| h.get(&Symbol::from("n")).cloned())
+        .context(format!("type {:?} cannot be indexed into", vtype))?;
+    log::trace!("indexing into bytes of length {:?}", v_length);
+    // then, we unify the index into a range to see whether it's correct.
+    let i_params = Type::<Void, Symbol>::NatRange(
+        ConstExpr::Var(Symbol::from("a")),
+        ConstExpr::Var(Symbol::from("b")),
+    )
+    .unify_cvars(itype)
+    .unwrap_or_default();
+    let i_upper_bound = i_params.get(&Symbol::from("b")).cloned().context(format!(
+        "bytes index of type {:?} has no upper bound",
+        itype
+    ))?;
+    if !i_upper_bound.le(&v_length) {
+        Err(anyhow::anyhow!(
+            "cannot index into vector {:?} of length {:?} with something of type {:?}",
+            vtype,
+            v_length,
+            itype
+        ))
+    } else {
+        Ok(Type::NatRange(0.into(), 255.into()))
     }
 }
 
@@ -1079,6 +1121,8 @@ fn typecheck_type_expr<Tv: Variable, Cv: Variable>(
             let v = typecheck_type_expr(state, v)?;
             Ok(Type::DynVectorof(v.into()))
         }
+        RawTypeExpr::Bytes(c) => Ok(Type::Bytes(typecheck_const_expr(state, c)?)),
+        RawTypeExpr::DynBytes => todo!(),
     }
 }
 
@@ -1238,6 +1282,7 @@ fn monomorphize_inner(
                 recurse(&res).into(),
             ),
             ExprInner::Fail => ExprInner::Fail,
+            ExprInner::LitBytes(b) => ExprInner::LitBytes(b),
         },
         itype: body
             .itype

@@ -35,6 +35,14 @@ pub fn partially_erase_cg<T: Variable, C: Variable>(
         Type::Struct(s, b) => Type::Struct(*s, b.iter().map(|(a, b)| (*a, recurse(b))).collect()),
         Type::Union(t, u) => Type::Union(recurse(t).into(), recurse(u).into()),
         Type::DynVectorof(t) => Type::DynVectorof(recurse(t).into()),
+        Type::Bytes(m) => {
+            if m.cvars().iter().any(erase) {
+                Type::DynBytes
+            } else {
+                Type::Bytes(m.clone())
+            }
+        }
+        Type::DynBytes => Type::DynBytes,
     }
 }
 

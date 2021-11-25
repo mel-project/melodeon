@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bytes::Bytes;
 use ethnum::U256;
 
 use crate::containers::{List, Map, Symbol, Void};
@@ -87,6 +88,7 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
         List<Expr<TVar, CVar>>,
     ),
     LitNum(U256),
+    LitBytes(Bytes),
     LitVec(List<Expr<TVar, CVar>>),
     LitConst(ConstExpr<CVar>),
     Var(Symbol),
