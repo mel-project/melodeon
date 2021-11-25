@@ -1,5 +1,5 @@
 // "lexer" items
-reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "fail" | "struct" | "require" | "provide" | "transmute" | "collect" | "with"}
+reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "fail" | "struct" | "require" | "provide" | "transmute" | "collect" | "with" | "type" | "extern" | "call"}
 nat_literal = @{ ASCII_DIGIT+ }
 type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
 var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
@@ -36,7 +36,7 @@ program = {
 
 // definitions
 definition = {
-    fun_def | fun_def_gen | struct_def | require | provide
+    fun_def | fun_def_gen | struct_def | require | provide | alias
 }
 
 fun_def = { "def" ~ var_name ~ "(" ~ fun_args ~ ")" ~ (":" ~ type_expr)? ~ "=" ~ expr }
@@ -53,7 +53,8 @@ fun_args = {
 struct_def = { "struct" ~ type_name ~ "{" ~ fun_args ~ "}" }
 
 require = { "require" ~ string_literal }
-provide = { "provide" ~ var_name }
+provide = { "provide" ~ (var_name | type_name) }
+alias   = { "type" ~ type_name ~ "=" ~ type_expr }
 
 // types
 type_expr = _{
@@ -140,6 +141,9 @@ terminal_expr   = _{
     hex_literal |
     string_literal |
     is_type |
+    unsafe_expr |
+    extern_call_expr | 
+    extern_expr |
     transmute_expr |
     nat_literal |
     cgvar_name |
@@ -151,10 +155,13 @@ terminal_expr   = _{
     cflow_expr |
     "(" ~ expr ~ ")"
 }
-is_type     	= { var_name ~ "is" ~ type_expr }
-vector_literal 	= { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
-bytes_literal   = { "%[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
-struct_literal 	= { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }
-hex_literal = ${ "x\"" ~ (ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT)* ~ "\""}
-for_literal	= { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
-transmute_expr	= { "unsafe" ~ "transmute" ~ expr ~ "into" ~ type_expr }
+is_type     	    = { var_name ~ "is" ~ type_expr }
+vector_literal  	= { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
+bytes_literal       = { "%[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
+struct_literal   	= { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }
+hex_literal         = ${ "x\"" ~ (ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT)* ~ "\""}
+for_literal	        = { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
+transmute_expr	    = { "transmute" ~ expr ~ "into" ~ type_expr }
+extern_expr		    = { "extern" ~ string_literal }
+extern_call_expr    = { "extern" ~ "call" ~ string_literal ~ call_args }
+unsafe_expr         = { "unsafe" ~ expr }

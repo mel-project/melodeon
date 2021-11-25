@@ -160,6 +160,10 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
             crate::grammar::RawDefn::Provide(_) => {
                 panic!("non-demodularized AST passed into typechecker")
             }
+            crate::grammar::RawDefn::TypeAlias(a, b) => {
+                let b = typecheck_type_expr(&state, b.clone())?;
+                state = state.bind_type_alias(**a, b);
+            }
         }
     }
     log::trace!("initial definitions created: {:?}", fun_defs);
@@ -299,11 +303,11 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 }
                 // don't check for nats
                 crate::grammar::BinOp::Eq => {
-                    if !a_expr.itype.subtype_of(&b_expr.itype)
-                        && !b_expr.itype.subtype_of(&a_expr.itype)
+                    if !a_expr.itype.subtype_of(&Type::all_nat())
+                        && !b_expr.itype.subtype_of(&Type::all_nat())
                     {
                         Err(anyhow::anyhow!(
-                            "cannot compare equality for incomparable types {:?} and {:?}",
+                            "cannot compare equality for non-numeric types {:?} and {:?}",
                             a_expr.itype,
                             b_expr.itype
                         )
@@ -809,10 +813,14 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             ))
         }
         RawExpr::Transmute(inner, t) => {
-            let mut inner = recurse(inner)?;
-            let t = typecheck_type_expr(&state, t)?;
-            inner.0.itype = t;
-            Ok(inner)
+            if state.lookup_safety() {
+                Err(anyhow::anyhow!("cannot transmute without unsafe").with_ctx(ctx))
+            } else {
+                let mut inner = recurse(inner)?;
+                let t = typecheck_type_expr(&state, t)?;
+                inner.0.itype = t;
+                Ok(inner)
+            }
         }
         RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body) => {
             // First, we try the "easy" case, where the body has, straightforwardly, the same type as the accum
@@ -1005,6 +1013,34 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             let itype = Type::Bytes(args.len().into());
             Ok((ExprInner::LitBVec(args).wrap(itype), TypeFacts::empty()))
         }
+        RawExpr::Unsafe(s) => typecheck_expr(state.bind_safety(false), s),
+        RawExpr::Extern(ext) => {
+            if state.lookup_safety() {
+                return Err(
+                    anyhow::anyhow!("cannot use an external variable without unsafe").with_ctx(ctx),
+                );
+            }
+            Ok((
+                ExprInner::Extern(ext.deref().clone()).wrap_any(),
+                TypeFacts::empty(),
+            ))
+        }
+        RawExpr::ExternApply(f, args) => {
+            if state.lookup_safety() {
+                return Err(
+                    anyhow::anyhow!("cannot call an external function without unsafe")
+                        .with_ctx(ctx),
+                );
+            }
+            let args = args
+                .into_iter()
+                .map(|f| Ok(recurse(f)?.0))
+                .collect::<CtxResult<List<_>>>()?;
+            Ok((
+                ExprInner::ExternApply(f.deref().clone(), args).wrap_any(),
+                TypeFacts::empty(),
+            ))
+        }
     }
 }
 
@@ -1142,7 +1178,7 @@ fn typecheck_type_expr<Tv: Variable, Cv: Variable>(
             Ok(Type::DynVectorof(v.into()))
         }
         RawTypeExpr::Bytes(c) => Ok(Type::Bytes(typecheck_const_expr(state, c)?)),
-        RawTypeExpr::DynBytes => todo!(),
+        RawTypeExpr::DynBytes => Ok(Type::DynBytes),
     }
 }
 
@@ -1304,6 +1340,10 @@ fn monomorphize_inner(
             ExprInner::Fail => ExprInner::Fail,
             ExprInner::LitBytes(b) => ExprInner::LitBytes(b),
             ExprInner::LitBVec(v) => ExprInner::LitBVec(v.iter().map(recurse).collect()),
+            ExprInner::ExternApply(x, args) => {
+                ExprInner::ExternApply(x, args.iter().map(recurse).collect())
+            }
+            ExprInner::Extern(x) => ExprInner::Extern(x),
         },
         itype: body
             .itype

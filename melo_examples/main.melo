@@ -1,30 +1,4 @@
-require "aux.melo"
 
-# require <aux.melo>
-
-def foo<$n>() = succ(0)
-def succ<$n>(x: {$n..$n}) = $n + 1
-def peel<$n>(x: {$n+1..$n+1}) = $n
-
-def range<$n>(x: {$n..$n}) =
-    let accum = unsafe transmute [] into [Nat; $n] in
-    let ctr = 0 as Nat in
-    loop $n do
-        set! accum = unsafe transmute accum ++ [ctr] into [Nat; $n]; 
-        set! ctr = ctr + 1
-    done with accum
-
-def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
-    for i in range($n)
-    fold accum = [] as [[T, U]; 0] with
-        accum ++ [[unsafe_idx(x, i), unsafe_idx(y, i)]]
-
-def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
-
-def unsafe_idx<T>(x: [T;], i: Nat) = (unsafe transmute x into [T; 1])[unsafe transmute i into {0}]
-
-def g(x: %[5]) = x ++ %[0]
-
---- 
-
-g(x"deadbeefde")
+let outputs = env_spender_tx().outputs in
+assert! outputs is [RawCoinID; 1] in
+b32_to_nat(outputs[0][0]) == b32_to_nat(env_self_hash())

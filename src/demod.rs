@@ -6,7 +6,9 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use crate::{
     containers::{List, Set, Symbol},
     context::{Ctx, CtxErr, CtxResult, ModuleId, ToCtx, ToCtxErr},
-    grammar::{parse_program, RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeExpr},
+    grammar::{
+        parse_program, RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr,
+    },
 };
 
 /// A struct that encapsulates a parallel demodularizer that eliminates "require" and "provide" in a raw AST.
@@ -131,11 +133,24 @@ fn mangle(defs: List<Ctx<RawDefn>>, source: ModuleId) -> List<Ctx<RawDefn>> {
                 }
                 RawDefn::Struct { name, fields } => Some(RawDefn::Struct {
                     name: mangle_ctx_sym(name, source, &no_mangle),
-                    fields,
+                    fields: fields
+                        .into_iter()
+                        .map(|rtb| {
+                            RawTypeBind {
+                                name: rtb.name.clone(),
+                                bind: mangle_type_expr(rtb.bind.clone(), source, &no_mangle),
+                            }
+                            .with_ctx(rtb.ctx())
+                        })
+                        .collect(),
                 }),
                 RawDefn::Constant(_, _) => todo!(),
                 RawDefn::Require(_) => None,
                 RawDefn::Provide(_) => None,
+                RawDefn::TypeAlias(t, a) => Some(RawDefn::TypeAlias(
+                    mangle_ctx_sym(t, source, &no_mangle),
+                    mangle_type_expr(a, source, &no_mangle),
+                )),
             }
             .map(|c| c.with_ctx(defn.ctx()))
         })
@@ -213,6 +228,11 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         }
         RawExpr::LitBytes(b) => RawExpr::LitBytes(b),
         RawExpr::LitBVec(vv) => RawExpr::LitBVec(vv.into_iter().map(recurse).collect()),
+        RawExpr::Unsafe(s) => RawExpr::Unsafe(recurse(s)),
+        RawExpr::Extern(s) => RawExpr::Extern(s),
+        RawExpr::ExternApply(f, args) => {
+            RawExpr::ExternApply(f, args.into_iter().map(recurse).collect())
+        }
     }
     .with_ctx(ctx)
 }
@@ -237,7 +257,11 @@ fn mangle_ctx_sym(sym: Ctx<Symbol>, source: ModuleId, no_mangle: &Set<Symbol>) -
 }
 
 fn mangle_sym(sym: Symbol, source: ModuleId, no_mangle: &Set<Symbol>) -> Symbol {
-    if no_mangle.contains(&sym) {
+    if no_mangle.contains(&sym)
+        || sym == Symbol::from("Nat")
+        || sym == Symbol::from("Any")
+        || sym == Symbol::from("None")
+    {
         sym
     } else {
         Symbol::from(format!("{:?}-{}", sym, source.uniqid()).as_str())

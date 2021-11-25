@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Display},
-    ops::Deref,
+    ops::{Deref, DerefMut},
     path::Path,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -66,6 +66,12 @@ impl<T> Deref for Ctx<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.inner.deref()
+    }
+}
+
+impl<T: Clone> DerefMut for Ctx<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        Arc::make_mut(&mut self.inner)
     }
 }
 

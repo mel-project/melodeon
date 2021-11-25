@@ -99,6 +99,18 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         res
     }
 
+    // /// Checks whether or not a value of this type can be compared with another value of another type.
+    // pub fn comparable_with(&self, other: &Self) -> bool {
+    //     log::trace!("checking {:?} comparable? {:?}", self, other);
+    //     match (self, other) {
+    //         (Type::Any, _) => false,
+    //         (Type::NatRange(_, _), Type::NatRange(_, _)) => true,
+    //         (Type::Struct(_, _), Type::Struct(_, _)) =>
+    //         (Type::Union(t, u), _) => t.comparable_with(other) && u.comparable_with(other),
+    //         _ => other.comparable_with(self),
+    //     }
+    // }
+
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
         log::trace!("checking {:?} <:? {:?}", self, other);

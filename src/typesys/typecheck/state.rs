@@ -12,6 +12,7 @@ pub struct TypecheckState<TVar: Variable, CVar: Variable> {
     type_scope: Map<Symbol, Type<TVar, CVar>>,
     cg_scope: Map<Symbol, ConstExpr<CVar>>,
     function_scope: Map<Symbol, FunctionType<TVar, CVar>>,
+    safety: bool,
 }
 
 impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
@@ -22,6 +23,7 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
             type_scope: Map::new(),
             cg_scope: Map::new(),
             function_scope: Map::new(),
+            safety: true,
         }
     }
 
@@ -49,6 +51,17 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
         self
     }
 
+    /// Binds safety mode.
+    pub fn bind_safety(mut self, safety: bool) -> Self {
+        self.safety = safety;
+        self
+    }
+
+    /// Gets safety
+    pub fn lookup_safety(&self) -> bool {
+        self.safety
+    }
+
     /// Looks up the type of a variable
     pub fn lookup_var(&self, s: Symbol) -> Option<Type<TVar, CVar>> {
         self.variable_scope.get(&s).cloned()
@@ -73,10 +86,11 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
     pub fn with_facts(mut self, facts: &TypeFacts<TVar, CVar>) -> Self {
         for (k, v) in facts.iter() {
             if let Some(t) = self.variable_scope.get_mut(k) {
-                let new_t = if v.subtype_of(t) {
-                    v.clone()
-                } else {
+                log::debug!("applying fact type {:?} to existing {:?}", v, t);
+                let new_t = if t.subtype_of(v) {
                     t.clone()
+                } else {
+                    v.clone()
                 };
                 *t = new_t;
             }

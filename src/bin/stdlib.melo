@@ -1,0 +1,82 @@
+struct CoinID {
+	txhash: %[32],
+	index: Nat
+}
+
+struct CoinData {
+	covhash: %[32],
+	value: Nat,
+	denom: Nat,
+	additional_data: Any,
+}
+
+type RawCoinID = [%[32], Nat]
+type RawCoinData = [%[32], Nat, Nat, Any]
+type Hash = %[32]
+
+struct Transaction {
+	kind: Nat,
+	inputs: [RawCoinID;],
+	outputs: [RawCoinData;],
+	fee: Nat,
+	scripts: [%[];],
+	data: %[],
+	sigs: [%[];]
+}
+
+# Wrappers for the environment
+
+def env_spender_tx() =
+	let raw_tx = unsafe transmute (unsafe extern "SPENDER-TX") into [Any; 7] in 
+ 	Transaction {
+		kind: unsafe transmute raw_tx[0] into Nat,
+		inputs: unsafe transmute raw_tx[1] into [RawCoinID ;],
+		outputs: unsafe transmute raw_tx[2] into [RawCoinData ;],
+		fee: unsafe transmute raw_tx[3] into Nat,
+		scripts: unsafe transmute raw_tx[4] into [%[] ;],
+		data: unsafe transmute raw_tx[5] into %[],
+		sigs: unsafe transmute raw_tx[6] into [%[] ;]
+	}
+	
+def env_spender_tx_hash() = unsafe transmute unsafe extern "SPENDER-TX-HASH" into Hash
+def env_parent_tx_hash() = unsafe transmute extern "PARENT-TX-HASH" into Hash
+def env_parent_index() = unsafe transmute extern "PARENT-INDEX" into Nat
+def env_self_hash() = unsafe transmute extern "SELF-HASH" into Hash
+def env_parent_value() = unsafe transmute extern "PARENT-VALUE" into Nat
+def env_parent_denom() = unsafe transmute extern "PARENT-DENOM" into Nat
+def env_parent_data() = unsafe transmute extern "PARENT-DATA" into %[]
+def env_parent_height() = unsafe transmute extern "PARENT-HEIGHT" into Nat
+def env_spender_index() = unsafe transmute extern "SPENDER-INDEX" into Nat
+
+
+# # Vector tools
+def vlen(vec: [Any ;]) : Nat =
+	unsafe transmute
+		extern call "v-len" (vec)
+	into Nat
+
+def blen(bytes: %[]) : Nat =
+	unsafe transmute
+		extern call "b-len" (bytes)
+	into Nat
+
+def range<$n>(x: {$n..$n}) =
+    unsafe let accum = transmute [] into [Nat; $n] in
+    let ctr = 0 as Nat in
+    loop $n do
+        set! accum = transmute accum ++ [ctr] into [Nat; $n]; 
+        set! ctr = ctr + 1
+    done with accum
+
+def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
+    for i in range($n)
+    fold accum = [] as [[T, U]; 0] with
+        accum ++ [[unsafe_idx(x, i), unsafe_idx(y, i)]]
+
+def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
+
+def unsafe_idx<T>(x: [T;], i: Nat) = unsafe (transmute x into [T; 1])[transmute i into {0}]
+
+# Conversions
+
+def b32_to_nat(b: %[32]) = unsafe transmute extern call "btoi" (b) into Nat

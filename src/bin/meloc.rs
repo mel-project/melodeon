@@ -9,6 +9,7 @@ use melodeon_rs::{
     codegen::codegen_program,
     context::{CtxResult, ModuleId},
     demod::Demodularizer,
+    grammar::parse_program,
     typesys::typecheck_program,
 };
 
@@ -76,9 +77,18 @@ fn main() {
 }
 
 fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
-    let raw_input = time_stage("parse+demod", || {
+    let mut raw_input = time_stage("parse+demod", || {
         loader.demod(ModuleId::from_path(Path::new(&args.input)))
     })?;
+    let stdlib_input = time_stage("load stdlib", || {
+        parse_program(
+            include_str!("stdlib.melo"),
+            ModuleId::from_path(Path::new("STDLIB")),
+        )
+    })?;
+    for def in stdlib_input.definitions.iter().cloned() {
+        raw_input.definitions.push_front(def);
+    }
     let tchecked = time_stage("typecheck", || typecheck_program(raw_input))?;
     let product = time_stage("codegen", || codegen_program(tchecked));
     println!("{}", product);

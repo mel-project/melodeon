@@ -31,6 +31,7 @@ pub enum RawDefn {
     Constant(Ctx<Symbol>, Ctx<RawExpr>),
     Require(ModuleId),
     Provide(Symbol),
+    TypeAlias(Ctx<Symbol>, Ctx<RawTypeExpr>),
 }
 
 /// A type binding
@@ -92,6 +93,10 @@ pub enum RawExpr {
     AsType(Ctx<Self>, Ctx<RawTypeExpr>),
 
     Transmute(Ctx<Self>, Ctx<RawTypeExpr>),
+
+    Unsafe(Ctx<Self>),
+    Extern(Ctx<String>),
+    ExternApply(Ctx<String>, List<Ctx<Self>>),
 }
 
 /// Binary operator
@@ -195,6 +200,7 @@ impl RawDefn {
             RawDefn::Function { name, .. } => **name,
             RawDefn::Struct { name, .. } => **name,
             RawDefn::Constant(name, _) => **name,
+            RawDefn::TypeAlias(name, _) => **name,
             _ => Symbol::from("undefined"),
         }
     }
@@ -219,6 +225,7 @@ impl RawDefn {
             RawDefn::Constant(_, body) => expr_parents(body),
             RawDefn::Require(_) => Set::new(),
             RawDefn::Provide(_) => Set::new(),
+            RawDefn::TypeAlias(_, a) => typebind_parents(a),
         }
     }
 }
@@ -288,5 +295,10 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::IsType(v, t) => Set::unit(*v).union(typebind_parents(t)),
         RawExpr::AsType(a, t) | RawExpr::Transmute(a, t) => rec(a).union(typebind_parents(t)),
         RawExpr::LitBytes(_) => Set::new(),
+        RawExpr::Unsafe(s) => rec(s),
+        RawExpr::Extern(_) => Set::new(),
+        RawExpr::ExternApply(_, args) => args
+            .into_iter()
+            .fold(Set::new(), |acc, arg| acc.union(rec(arg))),
     }
 }

@@ -191,6 +191,10 @@ fn codegen_expr(expr: &Expr) -> Value {
         .sexpr(),
         ExprInner::Fail => [Value::symbol("fail!")].sexpr(),
         ExprInner::LitBytes(b) => Value::symbol(format!("0x{}", hex::encode(&b))),
+        ExprInner::ExternApply(f, args) => std::iter::once(Value::symbol(f.as_str()))
+            .chain(args.iter().map(codegen_expr))
+            .sexpr(),
+        ExprInner::Extern(s) => Value::symbol(s.clone()),
     }
 }
 
@@ -321,12 +325,53 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
                 .sexpr()
             }
         }
-        Type::Vector(_) => todo!(),
-        Type::Vectorof(_, _) => todo!(),
+        Type::Vector(inners) => {
+            let is_vector_expr = [
+                Value::symbol("="),
+                Value::Number(2.into()),
+                [Value::symbol("typeof"), inner.clone()].sexpr(),
+            ]
+            .sexpr();
+            let length_correct_expr = [
+                Value::symbol("="),
+                Value::Number((inners.len() as u64).into()),
+                [Value::symbol("v-len"), inner.clone()].sexpr(),
+            ]
+            .sexpr();
+            inners
+                .iter()
+                .map(|i| generate_type_check(i, inner.clone()))
+                .fold(
+                    [Value::symbol("and"), is_vector_expr, length_correct_expr].sexpr(),
+                    |a, b| [Value::symbol("and"), a, b].sexpr(),
+                )
+        }
+        Type::Vectorof(v, n) => generate_type_check(
+            &Type::Vector(
+                std::iter::repeat(v.deref().clone())
+                    .take(n.eval().as_usize())
+                    .collect(),
+            ),
+            inner,
+        ),
         Type::Struct(_, _) => todo!(),
         Type::Union(_, _) => todo!(),
         Type::DynVectorof(_) => todo!(),
-        Type::Bytes(_) => todo!(),
+        Type::Bytes(n) => {
+            let is_bytes_expr = [
+                Value::symbol("="),
+                Value::Number(1.into()),
+                [Value::symbol("typeof"), inner.clone()].sexpr(),
+            ]
+            .sexpr();
+            let length_correct_expr = [
+                Value::symbol("="),
+                Value::Number((n.eval().as_u64()).into()),
+                [Value::symbol("b-len"), inner.clone()].sexpr(),
+            ]
+            .sexpr();
+            [Value::symbol("and"), is_bytes_expr, length_correct_expr].sexpr()
+        }
         Type::DynBytes => todo!(),
     }
 }

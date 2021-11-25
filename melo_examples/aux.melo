@@ -1,5 +1,0 @@
-provide boolayah
-
-def boolayah() = labooyah()
-def labooyah() = noonyanya()
-def noonyanya() = fail!

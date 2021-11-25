@@ -81,6 +81,8 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
     ),
     Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     Apply(Symbol, List<Expr<TVar, CVar>>),
+    ExternApply(String, List<Expr<TVar, CVar>>),
+    Extern(String),
     ApplyGeneric(
         Symbol,
         Map<TVar, Type<TVar, CVar>>,

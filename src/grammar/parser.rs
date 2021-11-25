@@ -136,6 +136,17 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
             let name = Symbol::from(pair.into_inner().next().unwrap().as_str());
             RawDefn::Provide(name).with_ctx(ctx)
         }
+        Rule::alias => {
+            let ctx = p2ctx(&pair, source);
+            let mut children = pair.into_inner();
+            let name = children.next().unwrap();
+            let texpr = parse_type_expr(children.next().unwrap(), source);
+            RawDefn::TypeAlias(
+                Symbol::from(name.as_str()).with_ctx(p2ctx(&name, source)),
+                texpr,
+            )
+            .with_ctx(ctx)
+        }
         _ => unreachable!(),
     }
 }
@@ -251,6 +262,16 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
     );
     let ctx = p2ctx(&pair, source);
     match pair.as_rule() {
+        Rule::unsafe_expr => {
+            let inner = parse_expr(pair.into_inner().next().unwrap(), source);
+            RawExpr::Unsafe(inner).with_ctx(ctx)
+        }
+        Rule::extern_expr => {
+            let inner = pair.into_inner().next().unwrap();
+            let ictx = p2ctx(&inner, source);
+            let inner = snailquote::unescape(inner.as_str()).unwrap();
+            RawExpr::Extern(inner.with_ctx(ictx)).with_ctx(ctx)
+        }
         Rule::if_expr => {
             let mut children = pair.into_inner().map(|c| parse_expr(c, source));
             let condition = children.next().unwrap();
@@ -318,6 +339,18 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 }
             }
             toret
+        }
+        Rule::extern_call_expr => {
+            let mut children = pair.into_inner();
+            let fun_name = children.next().unwrap();
+            let fun_name = snailquote::unescape(fun_name.as_str())
+                .unwrap()
+                .with_ctx(p2ctx(&fun_name, source));
+            let mut args = List::new();
+            for arg in children.next().unwrap().into_inner() {
+                args.push_back(parse_expr(arg, source));
+            }
+            RawExpr::ExternApply(fun_name, args).with_ctx(ctx)
         }
         Rule::apply_expr => {
             let mut children = pair.into_inner();
