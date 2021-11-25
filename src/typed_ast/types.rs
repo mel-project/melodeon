@@ -89,6 +89,7 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
     ),
     LitNum(U256),
     LitBytes(Bytes),
+    LitBVec(List<Expr<TVar, CVar>>),
     LitVec(List<Expr<TVar, CVar>>),
     LitConst(ConstExpr<CVar>),
     Var(Symbol),

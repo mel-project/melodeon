@@ -74,7 +74,7 @@ pub enum RawExpr {
     BinOp(Ctx<BinOp>, Ctx<RawExpr>, Ctx<RawExpr>),
     LitNum(U256),
     LitBytes(Bytes),
-
+    LitBVec(List<Ctx<Self>>),
     LitVec(List<Ctx<Self>>),
     LitStruct(Symbol, Map<Symbol, Ctx<RawExpr>>),
     Var(Symbol),
@@ -268,7 +268,9 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::If(p, t, f) => rec(p).union(rec(t)).union(rec(f)),
         RawExpr::BinOp(_, a, b) => rec(a).union(rec(b)),
         RawExpr::Field(strct, _) => rec(strct),
-        RawExpr::LitVec(v) => v.iter().fold(Set::new(), |acc, e| acc.union(rec(e))),
+        RawExpr::LitVec(v) | RawExpr::LitBVec(v) => {
+            v.iter().fold(Set::new(), |acc, e| acc.union(rec(e)))
+        }
         RawExpr::For(var, val, body) => rec(val).union(rec(body)).without(var),
         RawExpr::ForFold(var, val, avar, aval, body) => rec(val)
             .union(rec(aval))

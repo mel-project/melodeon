@@ -985,6 +985,26 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 TypeFacts::empty(),
             ))
         }
+        RawExpr::LitBVec(vv) => {
+            let args = vv
+                .into_iter()
+                .map(|arg| {
+                    let ctx = arg.ctx();
+                    let arg = recurse(arg)?.0;
+                    if !arg.itype.subtype_of(&Type::NatRange(0.into(), 255.into())) {
+                        Err(anyhow::anyhow!(
+                            "element in bytes must be byte-valued, got {:?} instead",
+                            arg.itype
+                        )
+                        .with_ctx(ctx))
+                    } else {
+                        Ok(arg)
+                    }
+                })
+                .collect::<CtxResult<List<_>>>()?;
+            let itype = Type::Bytes(args.len().into());
+            Ok((ExprInner::LitBVec(args).wrap(itype), TypeFacts::empty()))
+        }
     }
 }
 
@@ -1283,6 +1303,7 @@ fn monomorphize_inner(
             ),
             ExprInner::Fail => ExprInner::Fail,
             ExprInner::LitBytes(b) => ExprInner::LitBytes(b),
+            ExprInner::LitBVec(v) => ExprInner::LitBVec(v.iter().map(recurse).collect()),
         },
         itype: body
             .itype

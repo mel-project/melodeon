@@ -387,6 +387,14 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .collect();
             RawExpr::LitVec(children).with_ctx(ctx)
         }
+        Rule::bytes_literal => {
+            let children = pair
+                .into_inner()
+                .into_iter()
+                .map(|c| parse_expr(c, source))
+                .collect();
+            RawExpr::LitBVec(children).with_ctx(ctx)
+        }
         Rule::for_literal => {
             let mut children = pair.into_inner();
             let body = parse_expr(children.next().unwrap(), source);

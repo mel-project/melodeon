@@ -91,16 +91,25 @@ fn codegen_expr(expr: &Expr) -> Value {
             .sexpr()
         }
         ExprInner::BinOp(op, x, y) => {
-            let x = codegen_expr(x);
-            let y = codegen_expr(y);
             let op = match op {
                 BinOp::Add => Value::symbol("+"),
                 BinOp::Sub => Value::symbol("-"),
                 BinOp::Mul => Value::symbol("*"),
                 BinOp::Div => Value::symbol("/"),
-                BinOp::Append => Value::symbol("v-concat"),
+                BinOp::Append => {
+                    if x.itype
+                        .deunionize()
+                        .any(|f| matches!(f, Type::Bytes(_) | Type::DynBytes))
+                    {
+                        Value::symbol("b-concat")
+                    } else {
+                        Value::symbol("v-concat")
+                    }
+                }
                 BinOp::Eq => unreachable!(),
             };
+            let x = codegen_expr(x);
+            let y = codegen_expr(y);
             [op, x, y].sexpr()
         }
         ExprInner::If(a, b, c) => [
@@ -124,15 +133,28 @@ fn codegen_expr(expr: &Expr) -> Value {
             // lexpr does not support u64, so we desugar to smaller numbers
             u256_to_sexpr(*num)
         }
-        ExprInner::LitVec(vec) => {
-            Value::vector(vec.iter().map(|i| codegen_expr(i)).collect::<Vec<_>>())
-        }
+        ExprInner::LitVec(vec) => std::iter::once(Value::symbol("vector"))
+            .chain(vec.iter().map(|i| codegen_expr(i)))
+            .sexpr(),
+        ExprInner::LitBVec(vec) => std::iter::once(Value::symbol("bytes"))
+            .chain(vec.iter().map(|i| codegen_expr(i)))
+            .sexpr(),
         ExprInner::LitConst(_) => unreachable!(),
         ExprInner::Var(v) => Value::symbol(v.to_string()),
         ExprInner::IsType(a, t) => generate_type_check(t, Value::symbol(a.to_string())),
-        ExprInner::VectorRef(v, i) => {
-            [Value::symbol("v-get"), codegen_expr(v), codegen_expr(i)].sexpr()
-        }
+        ExprInner::VectorRef(v, i) => [
+            if v.itype
+                .deunionize()
+                .any(|f| matches!(f, Type::Bytes(_) | Type::DynBytes))
+            {
+                Value::symbol("b-get")
+            } else {
+                Value::symbol("v-get")
+            },
+            codegen_expr(v),
+            codegen_expr(i),
+        ]
+        .sexpr(),
         ExprInner::VectorUpdate(v, i, n) => [
             Value::symbol("v-from"),
             codegen_expr(v),

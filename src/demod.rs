@@ -212,6 +212,7 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
             )
         }
         RawExpr::LitBytes(b) => RawExpr::LitBytes(b),
+        RawExpr::LitBVec(vv) => RawExpr::LitBVec(vv.into_iter().map(recurse).collect()),
     }
     .with_ctx(ctx)
 }

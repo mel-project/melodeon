@@ -88,6 +88,17 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
     pub fn equiv_to(&self, other: &Self) -> bool {
         self.subtype_of(other) && other.subtype_of(other)
     }
+
+    /// "Deunionizes" the type, returning an iterator over non-union types.
+    pub fn deunionize(&self) -> impl Iterator<Item = &Self> {
+        let res: Box<dyn Iterator<Item = &Self>> = if let Type::Union(t, u) = self {
+            Box::new(t.deunionize().chain(u.deunionize()))
+        } else {
+            Box::new(std::iter::once(self))
+        };
+        res
+    }
+
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
         log::trace!("checking {:?} <:? {:?}", self, other);

@@ -23,7 +23,7 @@ def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
 
 def unsafe_idx<T>(x: [T;], i: Nat) = (unsafe transmute x into [T; 1])[unsafe transmute i into {0}]
 
-def g(x: %[5]) = x[0]
+def g(x: %[5]) = x ++ %[0]
 
 --- 
 

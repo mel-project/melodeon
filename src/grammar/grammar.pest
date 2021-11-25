@@ -144,6 +144,7 @@ terminal_expr   = _{
     nat_literal |
     cgvar_name |
     var_name |
+    bytes_literal  |
     vector_literal |
     struct_literal |
     for_literal |
@@ -152,6 +153,7 @@ terminal_expr   = _{
 }
 is_type     	= { var_name ~ "is" ~ type_expr }
 vector_literal 	= { "[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
+bytes_literal   = { "%[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
 struct_literal 	= { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }
 hex_literal = ${ "x\"" ~ (ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT)* ~ "\""}
 for_literal	= { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
