@@ -27,4 +27,4 @@ def g(x: %[5]) = x[0]
 
 --- 
 
-g("hello")
+g(x"deadbeefde")

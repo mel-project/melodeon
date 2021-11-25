@@ -137,6 +137,8 @@ as_type         = { "as" ~ type_expr }
 
 
 terminal_expr   = _{
+    hex_literal |
+    string_literal |
     is_type |
     transmute_expr |
     nat_literal |
@@ -146,8 +148,6 @@ terminal_expr   = _{
     struct_literal |
     for_literal |
     cflow_expr |
-    hex_literal |
-    string_literal |
     "(" ~ expr ~ ")"
 }
 is_type     	= { var_name ~ "is" ~ type_expr }

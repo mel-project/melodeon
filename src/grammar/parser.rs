@@ -428,7 +428,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
         }
         Rule::hex_literal => {
             let inner = pair.as_str();
-            let inner = &inner[2..inner.len() - 2];
+            let inner = &inner[2..inner.len() - 1];
             let decoded = hex::decode(inner).unwrap();
             RawExpr::LitBytes(decoded.into()).with_ctx(ctx)
         }
