@@ -5,7 +5,7 @@ use std::{path::Path, time::Instant};
 use argh::FromArgs;
 use colored::Colorize;
 use log::LevelFilter;
-use melodeon_rs::{
+use melodeon::{
     codegen::codegen_program,
     context::{CtxResult, ModuleId, ToCtxErr},
     demod::Demodularizer,
