@@ -36,7 +36,7 @@ program = {
 
 // definitions
 definition = {
-    fun_def | fun_def_gen | struct_def | require | provide | alias
+    fun_def | fun_def_gen | struct_def | require | require_lib | provide | alias
 }
 
 fun_def = { "def" ~ var_name ~ "(" ~ fun_args ~ ")" ~ (":" ~ type_expr)? ~ "=" ~ expr }
@@ -53,6 +53,7 @@ fun_args = {
 struct_def = { "struct" ~ type_name ~ "{" ~ fun_args ~ "}" }
 
 require = { "require" ~ string_literal }
+require_lib = { "require" ~ (var_name ~ "/")* ~ var_name }
 provide = { "provide" ~ (var_name | type_name) }
 alias   = { "type" ~ type_name ~ "=" ~ type_expr }
 

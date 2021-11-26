@@ -1,4 +1,4 @@
-use std::{cell::Cell, collections::VecDeque};
+use std::{cell::Cell, collections::VecDeque, path::Path};
 
 use anyhow::Context;
 use bytes::Bytes;
@@ -130,6 +130,15 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
             let ctx = p2ctx(&pair, source);
             let path = source.relative(pair.into_inner().next().unwrap().into_inner().as_str());
             RawDefn::Require(path).with_ctx(ctx)
+        }
+        Rule::require_lib => {
+            let ctx = p2ctx(&pair, source);
+            let children: Vec<_> = pair.into_inner().map(|p| p.as_str().to_string()).collect();
+            RawDefn::Require(ModuleId::from_path(Path::new(&format!(
+                "${}",
+                children.join("/")
+            ))))
+            .with_ctx(ctx)
         }
         Rule::provide => {
             let ctx = p2ctx(&pair, source);

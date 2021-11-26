@@ -1,4 +1,5 @@
+def labooyah() = 3
 
-let outputs = env_spender_tx().outputs in
-assert! outputs is [RawCoinID; 1] in
-b32_to_nat(outputs[0][0]) == b32_to_nat(env_self_hash())
+---
+
+labooyah()

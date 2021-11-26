@@ -19,13 +19,32 @@ pub struct Demodularizer {
 
 impl Demodularizer {
     /// Creates a new demodularizer, rooted at some filesystem.
-    pub fn new_at_fs(root: &Path) -> Self {
+    pub fn new_at_fs(root: &Path, global_root: &Path) -> Self {
         let root = root.to_owned();
-        let fallback = move |mid: ModuleId| {
-            let mut root = root.clone();
-            root.push(&mid.to_string());
-            Ok(std::fs::read_to_string(&root)?)
-        };
+        let global_root = global_root.to_owned();
+        let fallback =
+            move |mid: ModuleId| {
+                let mid = mid.to_string();
+                if mid.starts_with('$') {
+                    let mut root = global_root.clone();
+                    root.push(&mid[1..]);
+                    log::debug!("reading library {:?}", root);
+                    Ok(std::fs::read_to_string(&Path::new(&format!(
+                        "{}.melo",
+                        root.to_string_lossy()
+                    )))
+                    .or_else(|_| {
+                        std::fs::read_to_string(&Path::new(&format!(
+                            "{}/main.melo",
+                            root.to_string_lossy()
+                        )))
+                    })?)
+                } else {
+                    let mut root = root.clone();
+                    root.push(&mid);
+                    Ok(std::fs::read_to_string(&root)?)
+                }
+            };
         Self {
             cache: DashMap::new(),
             fallback: Box::new(fallback),

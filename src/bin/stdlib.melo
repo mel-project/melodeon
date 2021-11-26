@@ -75,7 +75,7 @@ def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
 
 def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
 
-def unsafe_idx<T>(x: [T;], i: Nat) = unsafe (transmute x into [T; 1])[transmute i into {0}]
+def unsafe_idx<$n, T>(x: [T;], i: Nat) = unsafe (transmute x into [T; 1])[transmute i into {0}]
 
 # Conversions
 

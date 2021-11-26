@@ -19,12 +19,15 @@ struct Args {
     #[argh(positional)]
     /// input file
     input: String,
+    #[argh(option, default = "\"./.melo-libs\".to_string()")]
+    /// library directory
+    lib_dir: String,
 }
 
 fn main() {
     let args: Args = argh::from_env();
     init_logs();
-    let loader = Demodularizer::new_at_fs(Path::new("."));
+    let loader = Demodularizer::new_at_fs(Path::new("."), Path::new(&args.lib_dir));
     if let Err(err) = main_inner(args, &loader) {
         let error_location: String;
         let mut detailed_line: Option<String> = None;
@@ -45,7 +48,9 @@ fn main() {
                                 toret.push(' ');
                             }
                             toret.push_str(&format!("{}", "^".bright_green().bold()));
-                            for _ in 1..ctx.end_offset - ctx.start_offset {
+                            for _ in
+                                1..(ctx.end_offset - ctx.start_offset).min(line.len() - line_offset)
+                            {
                                 toret.push_str(&format!("{}", "~".bright_green().bold()));
                             }
                             toret

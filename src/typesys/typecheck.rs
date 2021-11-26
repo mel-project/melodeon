@@ -2,6 +2,7 @@ use std::{fmt::Debug, ops::Deref, sync::atomic::AtomicUsize};
 
 use anyhow::Context;
 use dashmap::{DashMap, DashSet};
+use rustc_hash::FxHashSet;
 use tap::Tap;
 
 use crate::{
@@ -72,6 +73,15 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
         raw.ctx().map(|ctx| ctx.source.to_string()),
         raw.definitions.len()
     );
+    // Check for duplicate definitions
+    let mut seen = FxHashSet::default();
+    for defn in raw.definitions.iter() {
+        if !seen.insert(defn.name()) {
+            return Err(
+                anyhow::anyhow!("duplicated definition of {:?}", defn.name()).with_ctx(defn.ctx()),
+            );
+        }
+    }
     // Topologically sort definitions
     let sorted = sort_defs(raw.definitions.clone());
 
