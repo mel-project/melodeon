@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 description = "High-level language that targets the Themelio blockchains' MelVM covenants"
 license = "ISC"
+repository="https://github.com/themeliolabs/melodeon-rs"
+homepage="https://themelio.org"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
