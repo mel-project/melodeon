@@ -338,6 +338,10 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                             Rule::append => BinOp::Append,
                             Rule::land => BinOp::Land,
                             Rule::lor => BinOp::Lor,
+                            Rule::le => BinOp::Le,
+                            Rule::lt => BinOp::Lt,
+                            Rule::ge => BinOp::Ge,
+                            Rule::gt => BinOp::Gt,
                             _ => unreachable!(),
                         }
                         .with_ctx(p2ctx(child, source)),

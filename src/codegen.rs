@@ -107,6 +107,10 @@ fn codegen_expr(expr: &Expr) -> Value {
                     }
                 }
                 BinOp::Eq => unreachable!(),
+                BinOp::Lt => Value::symbol("<"),
+                BinOp::Le => Value::symbol("<="),
+                BinOp::Gt => Value::symbol(">"),
+                BinOp::Ge => Value::symbol(">="),
             };
             let x = codegen_expr(x);
             let y = codegen_expr(y);

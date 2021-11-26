@@ -43,10 +43,19 @@ pub trait ToCtx: Sized {
 impl<T: Sized> ToCtx for T {}
 
 /// Represents a reference-counted value that carries a context.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub struct Ctx<T> {
     inner: Arc<T>,
     context: Option<CtxLocation>,
+}
+
+impl<T> Clone for Ctx<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            context: self.context.clone(),
+        }
+    }
 }
 
 impl<T: Debug> Debug for Ctx<T> {

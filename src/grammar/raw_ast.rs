@@ -114,6 +114,10 @@ pub enum BinOp {
     Append,
 
     Eq,
+    Le,
+    Lt,
+    Ge,
+    Gt,
 }
 
 pub fn sort_defs(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
@@ -142,15 +146,14 @@ fn visit(
         visited.insert(def);
         log::trace!("visiting {:?}", def);
 
-        let def = find_by_name(defs, def)
-            .expect(&format!("A parent reference should always be in the definitions list, this is a bug. defs {:?}, trying to find {:?}", defs.iter().map(|d| d.name()).collect::<Vec<_>>(), def));
-
-        for parent in def.parents() {
-            log::trace!("{:?} depends on {:?}", def.name(), parent);
-            visit(parent, defs, &mut sorted, &mut visited);
+        let def = find_by_name(defs, def);
+        if let Some(def) = def {
+            for parent in def.parents() {
+                log::trace!("{:?} depends on {:?}", def.name(), parent);
+                visit(parent, defs, &mut sorted, &mut visited);
+            }
+            sorted.push_back(def.clone());
         }
-
-        sorted.push_back(def.clone());
     }
 }
 

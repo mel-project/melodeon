@@ -49,7 +49,7 @@ def env_parent_height() = unsafe transmute extern "PARENT-HEIGHT" into Nat
 def env_spender_index() = unsafe transmute extern "SPENDER-INDEX" into Nat
 
 
-# # Vector tools
+# Vector tools
 def vlen(vec: [Any ;]) : Nat =
 	unsafe transmute
 		extern call "v-len" (vec)
@@ -79,4 +79,9 @@ def unsafe_idx<$n, T>(x: [T;], i: Nat) = unsafe (transmute x into [T; 1])[transm
 
 # Conversions
 
-def b32_to_nat(b: %[32]) = unsafe transmute extern call "btoi" (b) into Nat
+def b2n(b: %[32]) = unsafe transmute extern call "btoi" (b) into Nat
+def n2b(b: Nat) = unsafe transmute extern call "itob" (b) into %[32]
+
+# signatures
+def ed25519_verify<$n>(msg: %[$n], public_key: %[32], signature: %[32]) =
+	unsafe transmute extern call "sigeok" (msg, public_key, signature) into {0..1}

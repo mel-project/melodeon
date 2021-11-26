@@ -144,4 +144,8 @@ pub enum BinOp {
     Append,
 
     Eq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
 }

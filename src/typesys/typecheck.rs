@@ -230,11 +230,13 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             ))
         }
         RawExpr::BinOp(op, a, b) => {
-            let (a_expr, _) = recurse(a.clone())?;
-            let (b_expr, _) = recurse(b.clone())?;
+            let a_expr = recurse(a.clone()).map(|a| a.0);
+            let b_expr = recurse(b.clone()).map(|a| a.0);
             let op = *op.deref();
             // both must be numbers
             let check_nats = || {
+                let a_expr = a_expr.as_ref().map_err(|e| e.clone())?;
+                let b_expr = b_expr.as_ref().map_err(|e| e.clone())?;
                 assert_subtype(ctx, &a_expr.itype, &Type::all_nat())?;
                 assert_subtype(ctx, &b_expr.itype, &Type::all_nat())?;
                 let template: Type<Void, i32> =
@@ -258,7 +260,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         Ok((
                             Expr {
                                 itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
-                                inner: ExprInner::BinOp(BinOp::Add, a_expr.into(), b_expr.into()),
+                                inner: ExprInner::BinOp(BinOp::Add, a_expr?.into(), b_expr?.into()),
                             },
                             TypeFacts::empty(),
                         ))
@@ -266,7 +268,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         Ok((
                             Expr {
                                 itype: Type::all_nat(),
-                                inner: ExprInner::BinOp(BinOp::Add, a_expr.into(), b_expr.into()),
+                                inner: ExprInner::BinOp(BinOp::Add, a_expr?.into(), b_expr?.into()),
                             },
                             TypeFacts::empty(),
                         ))
@@ -278,7 +280,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     Ok((
                         Expr {
                             itype: Type::all_nat(),
-                            inner: ExprInner::BinOp(BinOp::Sub, a_expr.into(), b_expr.into()),
+                            inner: ExprInner::BinOp(BinOp::Sub, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
                     ))
@@ -295,7 +297,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     Ok((
                         Expr {
                             itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
-                            inner: ExprInner::BinOp(BinOp::Mul, a_expr.into(), b_expr.into()),
+                            inner: ExprInner::BinOp(BinOp::Mul, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
                     ))
@@ -306,34 +308,65 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     Ok((
                         Expr {
                             itype: Type::all_nat(),
-                            inner: ExprInner::BinOp(BinOp::Div, a_expr.into(), b_expr.into()),
+                            inner: ExprInner::BinOp(BinOp::Div, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
                     ))
                 }
-                // don't check for nats
                 crate::grammar::BinOp::Eq => {
-                    if !a_expr.itype.subtype_of(&Type::all_nat())
-                        && !b_expr.itype.subtype_of(&Type::all_nat())
-                    {
-                        Err(anyhow::anyhow!(
-                            "cannot compare equality for non-numeric types {:?} and {:?}",
-                            a_expr.itype,
-                            b_expr.itype
-                        )
-                        .with_ctx(ctx))
-                    } else {
-                        Ok((
-                            Expr {
-                                itype: Type::NatRange(0.into(), 1.into()),
-                                inner: ExprInner::BinOp(BinOp::Eq, a_expr.into(), b_expr.into()),
-                            },
-                            TypeFacts::empty(),
-                        ))
-                    }
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::NatRange(0.into(), 1.into()),
+                            inner: ExprInner::BinOp(BinOp::Eq, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Lt => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::NatRange(0.into(), 1.into()),
+                            inner: ExprInner::BinOp(BinOp::Lt, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Le => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::NatRange(0.into(), 1.into()),
+                            inner: ExprInner::BinOp(BinOp::Le, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Gt => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::NatRange(0.into(), 1.into()),
+                            inner: ExprInner::BinOp(BinOp::Gt, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Ge => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::NatRange(0.into(), 1.into()),
+                            inner: ExprInner::BinOp(BinOp::Ge, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
                 }
                 crate::grammar::BinOp::Append => {
                     // vector append
+                    let a_expr = a_expr?;
+                    let b_expr = b_expr?;
                     Ok((
                         Expr {
                             itype: a_expr

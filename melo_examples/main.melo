@@ -1,5 +1,14 @@
-def labooyah() = 3
+# basic self-propagation covenant
+def propagate_to_first() =
+    let outputs = env_spender_tx().outputs in
+    if outputs is [RawCoinID; 1] then
+        b2n(env_self_hash()) == b2n(outputs[0][0])
+    else 0
+
+# expiry date
+def time_before(block_height: Nat) =
+    env_parent_height() <= block_height
 
 ---
 
-labooyah()
+propagate_to_first() && time_before(1000 * 1000)

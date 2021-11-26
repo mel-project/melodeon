@@ -13,10 +13,10 @@ div         = {"/"}
 lor         = {"||"}
 land        = {"&&"}
 equal       = {"=="}
-ge          = {">"}
-geq         = {">="}
-le          = {"<"}
-leq         = {"<="}
+gt          = {">"}
+ge          = {">="}
+lt          = {"<"}
+le          = {"<="}
 string_literal = ${ "\"" ~ inner ~ "\"" }
 inner = @{ char* }
 char = {
@@ -36,7 +36,7 @@ program = {
 
 // definitions
 definition = {
-    fun_def | fun_def_gen | struct_def | require | require_lib | provide | alias
+    fun_def | fun_def_gen | struct_def | require | require_lib | provide | alias 
 }
 
 fun_def = { "def" ~ var_name ~ "(" ~ fun_args ~ ")" ~ (":" ~ type_expr)? ~ "=" ~ expr }
@@ -122,7 +122,7 @@ bin_expr = _{
 // The "precedence" tower. From *loosest-binding* to tightest-binding.
 // Unlike in a CFG, in a PEG grammar, this is most naturally expressed as a rule with unbounded arity, rather than a binary rule.
 // This does require a bit of postprocessing (basically a fold) to turn into a binary form.
-rel_expr    = { add_expr ~ ((lor | land | equal) ~ add_expr)*}
+rel_expr    = { add_expr ~ ((lor | land | equal | le | lt | ge | gt) ~ add_expr)*}
 add_expr    = { mult_expr ~ ((append | add | sub) ~ mult_expr)* }
 mult_expr   = { apply_expr ~ ((mul | div) ~ apply_expr)* }
 apply_expr  = {
