@@ -7,7 +7,7 @@ use colored::Colorize;
 use log::LevelFilter;
 use melodeon_rs::{
     codegen::codegen_program,
-    context::{CtxResult, ModuleId},
+    context::{CtxResult, ModuleId, ToCtxErr},
     demod::Demodularizer,
     grammar::parse_program,
     typesys::typecheck_program,
@@ -19,6 +19,9 @@ struct Args {
     #[argh(positional)]
     /// input file
     input: String,
+    #[argh(option, default = "\"output.mil\".to_string()")]
+    /// input file
+    output: String,
     #[argh(option, default = "\"./.melo-libs\".to_string()")]
     /// library directory
     lib_dir: String,
@@ -96,7 +99,7 @@ fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
     }
     let tchecked = time_stage("typecheck", || typecheck_program(raw_input))?;
     let product = time_stage("codegen", || codegen_program(tchecked));
-    println!("{}", product);
+    std::fs::write(Path::new(args.output.as_str()), product.as_bytes()).err_ctx(None)?;
     Ok(())
 }
 
