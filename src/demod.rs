@@ -62,7 +62,7 @@ impl Demodularizer {
             let raw_string = (self.fallback)(id).err_ctx(None)?;
             let parsed = parse_program(&raw_string, id)?;
             // go through the dependencies in parallel, demodularizing as we go
-            let new_defs = parsed
+            let mut new_defs = parsed
                 .definitions
                 .par_iter()
                 .fold(
@@ -90,6 +90,13 @@ impl Demodularizer {
                         Ok(a)
                     },
                 )?;
+            // INJECT the stdlib
+            let stdlib = parse_program(
+                include_str!("stdlib.melo"),
+                ModuleId::from_path(Path::new("STDLIB")),
+            )
+            .unwrap();
+            new_defs.append(stdlib.definitions.clone());
             Ok(RawProgram {
                 definitions: new_defs,
                 body: parsed.body.clone(),

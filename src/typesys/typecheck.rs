@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Deref, sync::atomic::AtomicUsize};
+use std::{fmt::Debug, ops::Deref, path::Path, sync::atomic::AtomicUsize};
 
 use anyhow::Context;
 use dashmap::{DashMap, DashSet};
@@ -7,8 +7,8 @@ use tap::Tap;
 
 use crate::{
     containers::{List, Map, Symbol, Void},
-    context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
-    grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
+    context::{Ctx, CtxErr, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
+    grammar::{parse_program, sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
     typesys::{
         struct_uniqid,
@@ -67,7 +67,7 @@ fn assert_subtype<Tv: Variable, Cv: Variable>(
 }
 
 /// Typechecks a whole program, resolving free variables fully.
-pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
+pub fn typecheck_program(mut raw: Ctx<RawProgram>) -> CtxResult<Program> {
     log::debug!(
         "typechecking whole program rooted at {:?} with {} defs",
         raw.ctx().map(|ctx| ctx.source.to_string()),

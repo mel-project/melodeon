@@ -85,18 +85,9 @@ fn main() {
 }
 
 fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
-    let mut raw_input = time_stage("parse+demod", || {
+    let raw_input = time_stage("parse+demod", || {
         loader.demod(ModuleId::from_path(Path::new(&args.input)))
     })?;
-    let stdlib_input = time_stage("load stdlib", || {
-        parse_program(
-            include_str!("stdlib.melo"),
-            ModuleId::from_path(Path::new("STDLIB")),
-        )
-    })?;
-    for def in stdlib_input.definitions.iter().cloned() {
-        raw_input.definitions.push_front(def);
-    }
     let tchecked = time_stage("typecheck", || typecheck_program(raw_input))?;
     let product = time_stage("codegen", || codegen_program(tchecked));
     std::fs::write(Path::new(args.output.as_str()), product.as_bytes()).err_ctx(None)?;
