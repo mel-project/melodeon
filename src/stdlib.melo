@@ -11,7 +11,7 @@ struct CoinData {
 }
 
 type RawCoinID = [%[32], Nat]
-type RawCoinData = [%[32], Nat, Nat, Any]
+type RawCoinData = [%[32], Nat, %[], %[]]
 type Hash = %[32]
 
 struct Transaction {

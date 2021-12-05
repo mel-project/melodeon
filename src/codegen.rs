@@ -376,7 +376,12 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
             .sexpr();
             [Value::symbol("and"), is_bytes_expr, length_correct_expr].sexpr()
         }
-        Type::DynBytes => todo!(),
+        Type::DynBytes => [
+            Value::symbol("="),
+            Value::Number(1.into()),
+            [Value::symbol("typeof"), inner.clone()].sexpr(),
+        ]
+        .sexpr(),
     }
 }
 
