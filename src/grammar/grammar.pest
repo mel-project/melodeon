@@ -126,7 +126,7 @@ rel_expr    = { add_expr ~ ((lor | land | equal | le | lt | ge | gt) ~ add_expr)
 add_expr    = { mult_expr ~ ((append | add | sub) ~ mult_expr)* }
 mult_expr   = { apply_expr ~ ((mul | div) ~ apply_expr)* }
 apply_expr  = {
-    terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type)*
+    terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type)*
 }
 
 call_args       = { "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
@@ -134,7 +134,8 @@ field_access    = { "." ~ var_name }
 vector_ref      = { "[" ~ expr ~ "]" }
 vector_slice    = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 vector_update   = { "[" ~ expr ~ "=>" ~ expr ~ "]" }
-as_type         = { "as" ~ type_expr }
+as_type         = { "::" ~ type_expr }
+into_type       = { ":!" ~ type_expr }
 
 
 
@@ -145,9 +146,8 @@ terminal_expr   = _{
     unsafe_expr |
     extern_call_expr | 
     extern_expr |
-    transmute_expr |
     nat_literal |
-    cgvar_name |
+    cgvar_name | 
     var_name |
     bytes_literal  |
     vector_literal |
@@ -162,7 +162,6 @@ bytes_literal       = { "%[" ~ (expr ~ ",")* ~ (expr)? ~ "]" }
 struct_literal   	= { type_name ~ "{" ~ (var_name ~ ":" ~ expr ~ ",")* ~ (var_name ~ ":" ~ expr)? ~ "}" }
 hex_literal         = ${ "x\"" ~ (ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT)* ~ "\""}
 for_literal	        = { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
-transmute_expr	    = { "transmute" ~ expr ~ "into" ~ type_expr }
 extern_expr		    = { "extern" ~ string_literal }
 extern_call_expr    = { "extern" ~ "call" ~ string_literal ~ call_args }
 unsafe_expr         = { "unsafe" ~ expr }

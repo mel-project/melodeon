@@ -409,6 +409,11 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                         let type_expr = parse_type_expr(children.next().unwrap(), source);
                         toret = RawExpr::AsType(toret, type_expr).with_ctx(ctx);
                     }
+                    Rule::into_type => {
+                        let mut children = child.into_inner();
+                        let type_expr = parse_type_expr(children.next().unwrap(), source);
+                        toret = RawExpr::Transmute(toret, type_expr).with_ctx(ctx);
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -470,12 +475,6 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .collect();
             RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx)
         }
-        Rule::transmute_expr => {
-            let mut children = pair.into_inner();
-            let inner = parse_expr(children.next().unwrap(), source);
-            let t = parse_type_expr(children.next().unwrap(), source);
-            RawExpr::Transmute(inner, t).with_ctx(ctx)
-        }
         Rule::string_literal => {
             let true_repr = snailquote::unescape(pair.as_str()).unwrap();
             RawExpr::LitBytes(Bytes::copy_from_slice(true_repr.as_bytes())).with_ctx(ctx)
@@ -522,9 +521,10 @@ mod tests {
         eprintln!(
             "{:?}",
             parse_program(
-                r#"def labooyah<T, U, V>(f: [Nat; $n + 30]) : Nat = f + f
-                ---
-                labooyah(1)
+                r#"def range<$n>(x: {$n..$n}) =
+                    let accum = [] in
+                    let ctr = 0 :: Nat in
+                    accum
             "#,
                 ModuleId::from_path(Path::new("placeholder.melo"))
             )

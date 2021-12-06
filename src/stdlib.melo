@@ -27,61 +27,61 @@ struct Transaction {
 # Wrappers for the environment
 
 def env_spender_tx() =
-	let raw_tx = unsafe transmute (unsafe extern "SPENDER-TX") into [Any; 7] in 
+	let raw_tx = unsafe extern "SPENDER-TX" :! [Any; 7] in 
  	Transaction {
-		kind: unsafe transmute raw_tx[0] into Nat,
-		inputs: unsafe transmute raw_tx[1] into [RawCoinID ;],
-		outputs: unsafe transmute raw_tx[2] into [RawCoinData ;],
-		fee: unsafe transmute raw_tx[3] into Nat,
-		scripts: unsafe transmute raw_tx[4] into [%[] ;],
-		data: unsafe transmute raw_tx[5] into %[],
-		sigs: unsafe transmute raw_tx[6] into [%[] ;]
+		kind: unsafe raw_tx[0] :! Nat,
+		inputs: unsafe raw_tx[1] :! [RawCoinID ;],
+		outputs: unsafe raw_tx[2] :! [RawCoinData ;],
+		fee: unsafe raw_tx[3] :! Nat,
+		scripts: unsafe raw_tx[4] :! [%[] ;],
+		data: unsafe raw_tx[5] :! %[],
+		sigs: unsafe raw_tx[6] :! [%[] ;]
 	}
-	
-def env_spender_tx_hash() = unsafe transmute unsafe extern "SPENDER-TX-HASH" into Hash
-def env_parent_tx_hash() = unsafe transmute extern "PARENT-TX-HASH" into Hash
-def env_parent_index() = unsafe transmute extern "PARENT-INDEX" into Nat
-def env_self_hash() = unsafe transmute extern "SELF-HASH" into Hash
-def env_parent_value() = unsafe transmute extern "PARENT-VALUE" into Nat
-def env_parent_denom() = unsafe transmute extern "PARENT-DENOM" into Nat
-def env_parent_data() = unsafe transmute extern "PARENT-DATA" into %[]
-def env_parent_height() = unsafe transmute extern "PARENT-HEIGHT" into Nat
-def env_spender_index() = unsafe transmute extern "SPENDER-INDEX" into Nat
+
+def env_spender_tx_hash() = unsafe unsafe extern "SPENDER-TX-HASH" :! Hash
+def env_parent_tx_hash() = unsafe extern "PARENT-TX-HASH" :! Hash
+def env_parent_index() = unsafe extern "PARENT-INDEX" :! Nat
+def env_self_hash() = unsafe extern "SELF-HASH" :! Hash
+def env_parent_value() = unsafe extern "PARENT-VALUE" :! Nat
+def env_parent_denom() = unsafe extern "PARENT-DENOM" :! Nat
+def env_parent_data() = unsafe extern "PARENT-DATA" :! %[]
+def env_parent_height() = unsafe extern "PARENT-HEIGHT" :! Nat
+def env_spender_index() = unsafe extern "SPENDER-INDEX" :! Nat
 
 
 # Vector tools
 def vlen(vec: [Any ;]) : Nat =
-	unsafe transmute
+	unsafe
 		extern call "v-len" (vec)
-	into Nat
+	:! Nat
 
 def blen(bytes: %[]) : Nat =
-	unsafe transmute
+	unsafe 
 		extern call "b-len" (bytes)
-	into Nat
+	:! Nat
 
 def range<$n>(x: {$n..$n}) =
-    unsafe let accum = transmute [] into [Nat; $n] in
-    let ctr = 0 as Nat in
+    unsafe let accum = [] :! [Nat; $n] in
+    let ctr = 0 :: Nat in
     loop $n do
-        set! accum = transmute accum ++ [ctr] into [Nat; $n]; 
+        set! accum = (accum ++ [ctr]) :! [Nat; $n]; 
         set! ctr = ctr + 1
     done with accum
 
 def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
     for i in range($n)
-    fold accum = [] as [[T, U]; 0] with
+    fold accum = [] :: [[T, U]; 0] with
         accum ++ [[unsafe_idx(x, i), unsafe_idx(y, i)]]
 
 def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
 
-def unsafe_idx<$n, T>(x: [T;], i: Nat) = unsafe (transmute x into [T; 1])[transmute i into {0}]
+def unsafe_idx<$n, T>(x: [T;], i: Nat) = unsafe (x :! [T; 1])[i :! {0}]
 
 # Conversions
 
-def b2n(b: %[32]) = unsafe transmute extern call "btoi" (b) into Nat
-def n2b(b: Nat) = unsafe transmute extern call "itob" (b) into %[32]
+def b2n(b: %[32]) = unsafe extern call "btoi" (b) :! Nat
+def n2b(b: Nat) = unsafe extern call "itob" (b) :! %[32]
 
 # signatures
 def ed25519_verify<$n>(msg: %[$n], public_key: %[32], signature: %[32]) =
-	unsafe transmute extern call "sigeok" (msg, public_key, signature) into {0..1}
+	unsafe extern call "sigeok" (msg, public_key, signature) :! {0..1}
