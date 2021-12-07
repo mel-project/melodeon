@@ -28,6 +28,7 @@ pub enum RawDefn {
         name: Ctx<Symbol>,
         fields: List<Ctx<RawTypeBind>>,
     },
+
     Constant(Ctx<Symbol>, Ctx<RawExpr>),
     Require(ModuleId),
     Provide(Symbol),

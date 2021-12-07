@@ -358,7 +358,10 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
             ),
             inner,
         ),
-        Type::Struct(_, _) => todo!(),
+        Type::Struct(_, v) => generate_type_check(
+            &Type::Vector(v.iter().map(|t| t.1.clone()).collect()),
+            inner,
+        ),
         Type::Union(_, _) => todo!(),
         Type::DynVectorof(_) => todo!(),
         Type::Bytes(n) => {

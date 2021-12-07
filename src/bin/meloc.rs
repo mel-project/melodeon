@@ -9,7 +9,6 @@ use melodeon::{
     codegen::codegen_program,
     context::{CtxResult, ModuleId, ToCtxErr},
     demod::Demodularizer,
-    grammar::parse_program,
     typesys::typecheck_program,
 };
 

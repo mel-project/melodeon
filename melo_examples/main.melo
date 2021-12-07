@@ -1,8 +1,8 @@
 # basic self-propagation covenant
 def propagate_to_first() =
     let outputs = env_spender_tx().outputs in
-    if outputs is [RawCoinID; 1] then
-        b2n(env_self_hash()) == b2n(outputs[0][0])
+    if outputs is [CoinData; 1] then
+        b2n(env_self_hash()) == b2n(outputs[0].covhash)
     else 0
 
 # expiry date

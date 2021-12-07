@@ -65,7 +65,7 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
             }
             Type::Vector(vec) => vec.fmt(f),
             Type::Vectorof(a, b) => std::fmt::Display::fmt(&format!("[{:?}; {:?}]", a, b), f),
-            Type::Struct(s, v) => std::fmt::Display::fmt(&format!("!struct({}){:?}", s, v), f),
+            Type::Struct(s, _) => std::fmt::Display::fmt(&format!("{}", s), f),
             Type::Union(t, u) => std::fmt::Display::fmt(&format!("{:?} | {:?}", t, u), f),
             Type::DynVectorof(t) => std::fmt::Display::fmt(&format!("[{:?};]", t), f),
             Type::Bytes(t) => std::fmt::Display::fmt(&format!("%[{:?}]", t), f),
@@ -113,11 +113,18 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
 
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
-        log::trace!("checking {:?} <:? {:?}", self, other);
+        log::debug!("checking {:?} <:? {:?}", self, other);
         match (self, other) {
             (Type::None, _) => true,
             (_, Type::Any) => true,
             (Type::Any, _) => false,
+            // structs desugar to vectors
+            (Type::Struct(_, v), _) => {
+                Type::Vector(v.iter().map(|a| a.1.clone()).collect()).subtype_of(other)
+            }
+            (_, Type::Struct(_, v)) => {
+                self.subtype_of(&Type::Vector(v.iter().map(|a| a.1.clone()).collect()))
+            }
             (Type::Union(t, u), anything) => t.subtype_of(anything) && u.subtype_of(anything),
             (Type::Var(x), Type::Var(y)) => x == y,
             (Type::Var(_), Type::Union(t, u)) => {
@@ -208,9 +215,6 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         .unwrap_or(false)
             }
             (Type::Vectorof(_, _), _) => false,
-            (Type::Struct(a, _), Type::Struct(b, _)) => a == b,
-            // Structs are "atomic", just like individual numbers, so the union rule is in fact precise.
-            (Type::Struct(_, _), Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
             (Type::DynVectorof(v1_all), Type::DynVectorof(v2_all)) => v1_all.subtype_of(v2_all),
             (Type::DynVectorof(_), Type::Union(t, u)) => {
                 // conservatively deal with this
@@ -223,7 +227,6 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::DynBytes, Type::DynBytes) => true,
             (Type::DynBytes, Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
             (Type::DynBytes, _) => false,
-            (Type::Struct(_, _), _) => false,
         }
     }
 
@@ -1038,19 +1041,4 @@ mod tests {
             .filter_level(LevelFilter::Trace)
             .try_init();
     }
-}
-
-// def get<T, $n>(vec: [T; $n + 1], idx: {0..$n}) : T = vec[idx]
-
-/// Struct name to unique ID.
-pub fn struct_uniqid(name: Symbol) -> U256 {
-    U256::from_be_bytes(
-        *blake3::keyed_hash(
-            b"__________melodeon_struct_uniqid",
-            name.to_string().as_bytes(),
-        )
-        .as_bytes(),
-    )
-    .as_u64()
-    .into()
 }

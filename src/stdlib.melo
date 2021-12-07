@@ -1,23 +1,21 @@
+type Hash = %[32]
+
 struct CoinID {
-	txhash: %[32],
+	txhash: Hash,
 	index: Nat
 }
 
 struct CoinData {
-	covhash: %[32],
+	covhash: Hash,
 	value: Nat,
-	denom: Nat,
-	additional_data: Any,
+	denom: %[],
+	additional_data: %[],
 }
-
-type RawCoinID = [%[32], Nat]
-type RawCoinData = [%[32], Nat, %[], %[]]
-type Hash = %[32]
 
 struct Transaction {
 	kind: Nat,
-	inputs: [RawCoinID;],
-	outputs: [RawCoinData;],
+	inputs: [CoinID;],
+	outputs: [CoinData;],
 	fee: Nat,
 	scripts: [%[];],
 	data: %[],
@@ -26,17 +24,7 @@ struct Transaction {
 
 # Wrappers for the environment
 
-def env_spender_tx() =
-	let raw_tx = unsafe extern "SPENDER-TX" :! [Any; 7] in 
- 	Transaction {
-		kind: unsafe raw_tx[0] :! Nat,
-		inputs: unsafe raw_tx[1] :! [RawCoinID ;],
-		outputs: unsafe raw_tx[2] :! [RawCoinData ;],
-		fee: unsafe raw_tx[3] :! Nat,
-		scripts: unsafe raw_tx[4] :! [%[] ;],
-		data: unsafe raw_tx[5] :! %[],
-		sigs: unsafe raw_tx[6] :! [%[] ;]
-	}
+def env_spender_tx() = unsafe extern "SPENDER-TX" :! Transaction
 
 def env_spender_tx_hash() = unsafe unsafe extern "SPENDER-TX-HASH" :! Hash
 def env_parent_tx_hash() = unsafe extern "PARENT-TX-HASH" :! Hash

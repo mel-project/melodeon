@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Deref, path::Path, sync::atomic::AtomicUsize};
+use std::{fmt::Debug, ops::Deref, sync::atomic::AtomicUsize};
 
 use anyhow::Context;
 use dashmap::{DashMap, DashSet};
@@ -7,11 +7,10 @@ use tap::Tap;
 
 use crate::{
     containers::{List, Map, Symbol, Void},
-    context::{Ctx, CtxErr, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
-    grammar::{parse_program, sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
+    context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
+    grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
     typesys::{
-        struct_uniqid,
         typecheck::fold::{cgify_all_slots, partially_erase_cg, solve_recurrence},
         ConstExpr, Type, Variable,
     },
@@ -67,7 +66,7 @@ fn assert_subtype<Tv: Variable, Cv: Variable>(
 }
 
 /// Typechecks a whole program, resolving free variables fully.
-pub fn typecheck_program(mut raw: Ctx<RawProgram>) -> CtxResult<Program> {
+pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
     log::debug!(
         "typechecking whole program rooted at {:?} with {} defs",
         raw.ctx().map(|ctx| ctx.source.to_string()),
@@ -524,7 +523,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                                 a.into(),
                                 Expr {
                                     itype: Type::all_nat(),
-                                    inner: ExprInner::LitNum(((idx + 1) as u64).into()),
+                                    inner: ExprInner::LitNum((idx as u64).into()),
                                 }
                                 .into(),
                             ),
@@ -571,11 +570,19 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             }
         }
         RawExpr::IsType(x, y) => {
-            state
+            let orig_type = state
                 .lookup_var(x)
                 .context("undefined variable")
                 .err_ctx(ctx)?;
             let t = typecheck_type_expr(&state, y)?;
+            if !t.subtype_of(&orig_type) {
+                return Err(anyhow::anyhow!(
+                    "type check always fails because {:?} is not a subtype of {:?}",
+                    t,
+                    orig_type
+                )
+                .with_ctx(ctx));
+            }
             Ok((
                 Expr {
                     itype: Type::NatRange(0.into(), 1.into()),
@@ -709,7 +716,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     )
                     .with_ctx(ctx))
                 } else {
-                    let mut args = ifields.iter().map(|(fname, correct_t)| {
+                    let args = ifields.iter().map(|(fname, correct_t)| {
                         let actual = recurse(fields[fname].clone())?.0;
                         if !actual.itype.subtype_of(correct_t) {
                             Err(anyhow::anyhow!("field {:?}.{:?} must be of type {:?}, but given a value of type {:?}", name, fname, correct_t, actual.itype).with_ctx(fields[fname].ctx()))
@@ -717,14 +724,6 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                             Ok(actual)
                         }
                     }).collect::<CtxResult<List<_>>>()?;
-                    let sid = struct_uniqid(name);
-                    args.insert(
-                        0,
-                        Expr {
-                            itype: Type::all_nat(),
-                            inner: ExprInner::LitNum(sid),
-                        },
-                    );
                     Ok((
                         Expr {
                             itype: stype.clone(),
