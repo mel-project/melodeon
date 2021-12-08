@@ -323,7 +323,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let body = parse_expr(children.next().unwrap(), source);
             RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body).with_ctx(ctx)
         }
-        Rule::rel_expr | Rule::add_expr | Rule::mult_expr => {
+        Rule::rel_expr | Rule::add_expr | Rule::mult_expr | Rule::logic_expr => {
             let mut children: Vec<_> = pair.into_inner().collect();
             let mut toret = parse_expr(children.remove(0), source);
             for pair in children.chunks_exact(2) {
@@ -522,7 +522,7 @@ mod tests {
             "{:?}",
             parse_program(
                 r#"def range<$n>(x: {$n..$n}) =
-                    let accum = [] in
+                    let accum = [] in 
                     let ctr = 0 :: Nat in
                     accum
             "#,

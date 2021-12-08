@@ -1316,7 +1316,7 @@ fn monomorphize_inner(
                         .as_str(),
                     )
                 };
-                log::debug!("making up a mangled name {:?}!", mangled_name);
+                log::trace!("making up a mangled name {:?}!", mangled_name);
                 // if we have a monomorphized version already, we just call that.
                 // otherwise, we must populate the table now
                 if mangled.get(&mangled_name).is_none() {

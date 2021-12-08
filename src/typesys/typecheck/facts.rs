@@ -35,19 +35,21 @@ impl<Tv: Variable, Cv: Variable> TypeFacts<Tv, Cv> {
     pub fn union(mut self, other: Self) -> Self {
         //  A best-effort attempt at intersecting the types is done
         self.mapping = self.mapping.union_with(other.mapping, |a, b| {
-            if a.subtype_of(&b) {
-                a
+            let v = if a.subtype_of(&b) {
+                a.clone()
             } else if b.subtype_of(&a) {
-                b
+                b.clone()
             } else {
                 Type::None
-            }
+            };
+            v
         });
         self
     }
 
     /// Negates the type facts, with respect to some type state.
     pub fn negate_against(mut self, universe: &TypecheckState<Tv, Cv>) -> Self {
+        let pre = self.clone();
         self.mapping.iter_mut().for_each(|(k, b)| {
             if let Some(u) = universe.lookup_var(*k) {
                 let new = u.subtract(b).into_owned();

@@ -84,9 +84,10 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
 
     /// Applies some type facts
     pub fn with_facts(mut self, facts: &TypeFacts<TVar, CVar>) -> Self {
+        log::trace!("with facts {:?}", facts);
         for (k, v) in facts.iter() {
             if let Some(t) = self.variable_scope.get_mut(k) {
-                log::debug!("applying fact type {:?} to existing {:?}", v, t);
+                log::trace!("applying fact type {:?} to existing {:?}", v, t);
                 let new_t = if t.subtype_of(v) {
                     t.clone()
                 } else {

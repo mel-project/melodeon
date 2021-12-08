@@ -113,7 +113,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
 
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
-        log::debug!("checking {:?} <:? {:?}", self, other);
+        log::trace!("checking {:?} <:? {:?}", self, other);
         match (self, other) {
             (Type::None, _) => true,
             (_, Type::Any) => true,
@@ -223,6 +223,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             (Type::DynVectorof(_), _) => false,
             (Type::Bytes(n), Type::Bytes(m)) => n.leq(m) && m.leq(n),
             (Type::Bytes(_), Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
+            (Type::Bytes(_), Type::DynBytes) => true,
             (Type::Bytes(_), _) => false,
             (Type::DynBytes, Type::DynBytes) => true,
             (Type::DynBytes, Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
@@ -419,7 +420,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                         accum.insert(var.cvars()[0].clone(), solns[0].into());
                     }
                 }
-                (a, b) => log::warn!(
+                (a, b) => log::trace!(
                     "does not yet support cg-unification of {:?} with {:?}",
                     a,
                     b
