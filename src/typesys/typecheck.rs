@@ -778,8 +778,8 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             let val = recurse(val)?.0;
             let (val_inner_length, val_inner_type) = vector_info(&val).err_ctx(ctx)?;
             let body = typecheck_expr(state.bind_var(*sym, val_inner_type.clone()), body)?.0;
-            let temp_counter = Symbol::generate("-for-counter");
-            let temp_result = Symbol::generate("-for-result");
+            let temp_counter = Symbol::generate("@for-counter");
+            let temp_result = Symbol::generate("@for-result");
             let result_type = Type::Vectorof(body.itype.clone().into(), val_inner_length.clone());
             // desugar into a loop
             // let counter = 0 in
@@ -888,7 +888,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 // Then, the tricky, "inference" case. We "const-genericize" the accumulator, replacing every position where we *can* place a const-generic parameter with a const-generic parameter. For example, [Nat; 0] becomes [{$n..$m}; $q].
                 let new_cgvars = DashSet::new();
                 let init_accum_cgified = cgify_all_slots(&init_accum.itype, || {
-                    let v = Cv::try_from_sym(Symbol::generate("g")).unwrap();
+                    let v = Cv::try_from_sym(Symbol::generate("@g")).unwrap();
                     new_cgvars.insert(v.clone());
                     v
                 });
@@ -968,8 +968,8 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             //   set! counter = counter + 1
             // done with accum
             use ExprInner::*;
-            let temp_counter = Symbol::generate("-fold-counter");
-            let temp_input = Symbol::generate("-fold-input");
+            let temp_counter = Symbol::generate("@fold-counter");
+            let temp_input = Symbol::generate("@fold-input");
             let loop_inner: List<(Symbol, Expr<Tv, Cv>)> = [
                 (
                     *accum_name,

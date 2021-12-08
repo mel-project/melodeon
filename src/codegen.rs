@@ -67,8 +67,8 @@ fn codegen_fundef(fdef: &FunDefn) -> Value {
 fn codegen_expr(expr: &Expr) -> Value {
     match &expr.inner {
         ExprInner::BinOp(BinOp::Eq, x, y) => {
-            let x_temp = Symbol::generate("-if");
-            let y_temp = Symbol::generate("-if");
+            let x_temp = Symbol::generate("@if");
+            let y_temp = Symbol::generate("@if");
             [
                 Value::symbol("let"),
                 [
@@ -179,21 +179,23 @@ fn codegen_expr(expr: &Expr) -> Value {
             [
                 Value::symbol("loop"),
                 Value::Number(n.eval().as_u64().into()),
+                [Value::symbol("set-let"), [].sexpr()]
+                    .into_iter()
+                    .chain(bod.iter().map(|(s, x)| {
+                        [
+                            Value::symbol("set!"),
+                            Value::symbol(s.to_string()),
+                            codegen_expr(x),
+                        ]
+                        .sexpr()
+                    }))
+                    .sexpr(),
             ]
-            .into_iter()
-            .chain(bod.iter().map(|(s, x)| {
-                [
-                    Value::symbol("set!"),
-                    Value::symbol(s.to_string()),
-                    codegen_expr(x),
-                ]
-                .sexpr()
-            }))
             .sexpr(),
             codegen_expr(res),
         ]
         .sexpr(),
-        ExprInner::Fail => [Value::symbol("fail!")].sexpr(),
+        ExprInner::Fail => Value::symbol("fail!"),
         ExprInner::LitBytes(b) => Value::symbol(format!("0x{}", hex::encode(&b))),
         ExprInner::ExternApply(f, args) => std::iter::once(Value::symbol(f.as_str()))
             .chain(args.iter().map(codegen_expr))

@@ -67,8 +67,8 @@ def unsafe_idx<$n, T>(x: [T;], i: Nat) = unsafe (x :! [T; 1])[i :! {0}]
 
 # Conversions
 
-def b2n(b: %[32]) = unsafe extern call "btoi" (b) :! Nat
-def n2b(b: Nat) = unsafe extern call "itob" (b) :! %[32]
+def b2n(b: %[32]) = unsafe extern call "bytes->u256" (b) :! Nat
+def n2b(b: Nat) = unsafe extern call "u256->bytes" (b) :! %[32]
 
 # signatures
 def ed25519_verify<$n>(msg: %[$n], public_key: %[32], signature: %[32]) =
