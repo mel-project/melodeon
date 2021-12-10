@@ -24,11 +24,16 @@ struct Args {
     #[argh(option, default = "\"./.melo-libs\".to_string()")]
     /// library directory
     lib_dir: String,
+    #[argh(option, default = "false")]
+    /// silence all log messages
+    no_logs: bool,
 }
 
 fn main() {
     let args: Args = argh::from_env();
-    init_logs();
+    if !args.no_logs {
+        init_logs();
+    }
     let loader = Demodularizer::new_at_fs(Path::new("."), Path::new(&args.lib_dir));
     if let Err(err) = main_inner(args, &loader) {
         let error_location: String;

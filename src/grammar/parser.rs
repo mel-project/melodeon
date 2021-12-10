@@ -304,6 +304,16 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let body = parse_expr(children.next().unwrap(), source);
             RawExpr::Let(var_name, var_binding, body).with_ctx(ctx)
         }
+        Rule::let_q_expr => {
+            let mut children = pair.into_inner();
+            let var_name = children.next().unwrap();
+            let var_name = Symbol::from(var_name.as_str()).with_ctx(p2ctx(&var_name, source));
+            let var_binding = parse_expr(children.next().unwrap(), source);
+            let body = parse_expr(children.next().unwrap(), source);
+            let body_container =
+                RawExpr::BinOp(BinOp::Land.into(), RawExpr::Var(*var_name).into(), body);
+            RawExpr::Let(var_name, var_binding, body_container.into()).with_ctx(ctx)
+        }
         Rule::for_expr => {
             let mut children = pair.into_inner();
             let var_name = children.next().unwrap();

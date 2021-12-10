@@ -9,7 +9,7 @@ struct CoinData {
 	covhash: Hash,
 	value: Nat,
 	denom: %[],
-	additional_data: %[],
+	additional_nmdata: %[],
 }
 
 struct Transaction {
@@ -22,7 +22,7 @@ struct Transaction {
 	sigs: [%[];]
 }
 
-# Wrappers for the environment
+# Wrappers for the enviroent
 
 def env_spender_tx() = unsafe extern "SPENDER-TX" :! Transaction
 
@@ -72,4 +72,9 @@ def n2b(b: Nat) = unsafe extern call "u256->bytes" (b) :! %[32]
 
 # signatures
 def ed25519_verify<$n>(msg: %[$n], public_key: %[32], signature: %[32]) =
-	unsafe extern call "sigeok" (msg, public_key, signature) :! {0..1}
+	unsafe extern call "sigeok" (msg, public_key, signature) :! Bool
+
+# Definitions for bools etc
+type False = {0}
+type True = {1}
+type Bool = True | False

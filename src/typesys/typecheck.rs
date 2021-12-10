@@ -408,12 +408,18 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .lookup_var(v)
                 .context("undefined variable")
                 .err_ctx(ctx)?;
+            // Here we at least know that the variable is *NOT* false if expression is true.
             Ok((
                 Expr {
-                    itype,
+                    itype: itype.clone(),
                     inner: ExprInner::Var(v),
                 },
-                TypeFacts::empty(),
+                TypeFacts::empty().with_mapping(
+                    v,
+                    itype
+                        .subtract(&Type::NatRange(0.into(), 0.into()))
+                        .into_owned(),
+                ),
             ))
         }
         RawExpr::Apply(f, args) => {

@@ -93,7 +93,7 @@ expr = _{
     bin_expr    
 }
 
-cflow_expr = _{ let_expr | if_expr | loop_expr | fail_expr | assert_expr | fold_expr | for_expr }
+cflow_expr = _{ let_expr | let_q_expr | if_expr | loop_expr | fail_expr | assert_expr | fold_expr | for_expr }
 fail_expr = {"fail!"}
 assert_expr = {"assert!" ~ expr ~ "in" ~ expr}
 for_expr = {"for" ~ var_name ~ "in" ~ expr ~ "collect" ~ expr}
@@ -101,6 +101,10 @@ fold_expr = {"for" ~ var_name ~ "in" ~ expr ~ "fold" ~ var_name ~ "=" ~ expr ~ "
 
 let_expr = {
     "let" ~ var_name ~ "=" ~ expr ~ "in" ~ expr
+}
+
+let_q_expr = {
+    "let?" ~ var_name ~ "=" ~ expr ~ "in" ~ expr
 }
 
 if_expr = {

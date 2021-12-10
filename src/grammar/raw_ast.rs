@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use ethnum::U256;
+use tap::Pipe;
 
 use crate::{
     containers::{List, Map, Set, Symbol},
@@ -216,13 +217,22 @@ impl RawDefn {
                 args,
                 body,
                 genvars,
+                rettype,
                 ..
-            } => expr_parents(body).relative_complement(
-                args.iter()
-                    .map(|a| *a.name)
-                    .chain(genvars.iter().map(|a| **a))
-                    .collect(),
-            ),
+            } => expr_parents(body)
+                .relative_complement(
+                    args.iter()
+                        .map(|a| *a.name)
+                        .chain(genvars.iter().map(|a| **a))
+                        .collect(),
+                )
+                .pipe(|s| {
+                    if let Some(rettype) = rettype.as_ref() {
+                        s.union(typebind_parents(rettype))
+                    } else {
+                        s
+                    }
+                }),
             RawDefn::Struct { name: _, fields } => fields.iter().fold(Set::new(), |acc, field| {
                 acc.union(typebind_parents(&field.bind))
             }),
