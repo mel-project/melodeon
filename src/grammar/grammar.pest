@@ -51,6 +51,7 @@ fun_args = {
 }
 
 struct_def = { "struct" ~ type_name ~ "{" ~ fun_args ~ "}" }
+struct_def_gen = { "struct" ~ "<" ~ generic_params ~ ">" ~ "{" ~ fun_args ~ "}"}
 
 require = { "require" ~ string_literal }
 require_lib = { "require" ~ (var_name ~ "/")* ~ var_name }
@@ -61,7 +62,8 @@ alias   = { "type" ~ type_name ~ "=" ~ type_expr }
 type_expr = _{
     type_union
 }
-type_union = { type_terminal ~ ("|" ~ type_terminal)* }
+type_union = { (type_qmark | type_terminal) ~ ("|" ~ (type_qmark | type_terminal))* }
+type_qmark = { type_terminal ~ "?"}
 type_terminal = _{
     type_vector             |
     type_dynvectorof	    |
@@ -70,6 +72,7 @@ type_terminal = _{
     type_natrange           |
     type_bytes              |
     type_dynbytes           |
+
     "(" ~ type_expr ~ ")"  
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" } 

@@ -6,7 +6,7 @@ def propagate_to_first() =
     else 0
 
 # expiry date
-def time_before(block_height: Nat) =
+def time_before(block_height: Nat): Bool =
     env_parent_height() <= block_height
 
 ---

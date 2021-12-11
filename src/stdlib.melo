@@ -59,11 +59,17 @@ def range<$n>(x: {$n..$n}) =
 def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
     for i in range($n)
     fold accum = [] :: [[T, U]; 0] with
-        accum ++ [[unsafe_idx(x, i), unsafe_idx(y, i)]]
+        accum ++ [[unsafe_vref(x, i), unsafe_vref(y, i)]]
 
 def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
 
-def unsafe_idx<$n, T>(x: [T;], i: Nat) = unsafe (x :! [T; 1])[i :! {0}]
+def unsafe_vref<T>(x: [T;], i: Nat) = unsafe (x :! [T; 1])[i :! {0}]
+
+# def vref<T>(x: [T;], n: Nat): T | False = 
+# 	if n < vlen(x) then
+# 		unsafe_vref(x, n)
+# 	else
+# 		0
 
 # Conversions
 

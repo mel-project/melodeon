@@ -220,6 +220,19 @@ fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
             RawTypeExpr::Bytes(inner).with_ctx(ctx)
         }
         Rule::type_dynbytes => RawTypeExpr::DynBytes.with_ctx(ctx),
+        Rule::type_qmark => {
+            let mut children = pair.into_inner();
+            let inner_type = parse_type_expr(children.next().unwrap(), source);
+            RawTypeExpr::Union(
+                RawTypeExpr::NatRange(
+                    RawConstExpr::Lit(U256::from(0u8)).into(),
+                    RawConstExpr::Lit(U256::from(0u8)).into(),
+                )
+                .into(),
+                inner_type,
+            )
+            .with_ctx(ctx)
+        }
         _ => unreachable!(),
     }
 }
