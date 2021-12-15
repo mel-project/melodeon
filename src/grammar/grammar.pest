@@ -12,6 +12,11 @@ mul         = {"*"}
 div         = {"/"}
 lor         = {"||"}
 land        = {"&&"}
+lshift      = {"<<"}
+rshift      = {">>"}
+bor         = {"|"}
+band        = {"&"}
+bxor        = {"^"}
 equal       = {"=="}
 gt          = {">"}
 ge          = {">="}
@@ -129,8 +134,10 @@ bin_expr = _{
 // The "precedence" tower. From *loosest-binding* to tightest-binding.
 // Unlike in a CFG, in a PEG grammar, this is most naturally expressed as a rule with unbounded arity, rather than a binary rule.
 // This does require a bit of postprocessing (basically a fold) to turn into a binary form.
-logic_expr    = { rel_expr ~ ((lor | land) ~ rel_expr)*}
-rel_expr    = { add_expr ~ ((equal | le | lt | ge | gt) ~ add_expr)* }
+logic_expr    = { bitlogic_expr ~ ((lor | land) ~ bitlogic_expr)*}
+bitlogic_expr    = { rel_expr ~ ((bor | band | bxor) ~ rel_expr)*}
+rel_expr    = { shift_expr ~ ((equal | le | lt | ge | gt) ~ shift_expr)* }
+shift_expr  = { add_expr ~ ((lshift | rshift) ~ add_expr)* }
 add_expr    = { mult_expr ~ ((append | add | sub) ~ mult_expr)* }
 mult_expr   = { apply_expr ~ ((mul | div) ~ apply_expr)* }
 apply_expr  = {

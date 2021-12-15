@@ -148,4 +148,11 @@ pub enum BinOp {
     Le,
     Gt,
     Ge,
+
+    Bor,
+    Band,
+    Bxor,
+
+    Lshift,
+    Rshift,
 }

@@ -394,6 +394,56 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     recurse(desugared)
                 }
                 crate::grammar::BinOp::Lnot => todo!(),
+                crate::grammar::BinOp::Lshift => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::BinOp(BinOp::Lshift, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Rshift => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::BinOp(BinOp::Rshift, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Bor => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::BinOp(BinOp::Bor, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Band => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::BinOp(BinOp::Band, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
+                crate::grammar::BinOp::Bxor => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::BinOp(BinOp::Bxor, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
             }
         }
         RawExpr::LitNum(num) => Ok((

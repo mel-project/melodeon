@@ -9,6 +9,9 @@ def propagate_to_first() =
 def time_before(block_height: Nat): Bool =
     env_parent_height() <= block_height
 
+def rotl64(b: Nat, n: Nat): Nat =
+    ((b << n) | (b >> (96 - n))) ^ 115792089237316195423570985008687907853269984665640564039439137263839420088320
+
 ---
 
 propagate_to_first() && time_before(1000 * 1000)

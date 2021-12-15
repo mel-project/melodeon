@@ -111,6 +111,11 @@ fn codegen_expr(expr: &Expr) -> Value {
                 BinOp::Le => Value::symbol("<="),
                 BinOp::Gt => Value::symbol(">"),
                 BinOp::Ge => Value::symbol(">="),
+                BinOp::Bor => Value::symbol("or"),
+                BinOp::Band => Value::symbol("and"),
+                BinOp::Bxor => Value::symbol("xor"),
+                BinOp::Lshift => Value::symbol("<<"),
+                BinOp::Rshift => Value::symbol(">>"),
             };
             let x = codegen_expr(x);
             let y = codegen_expr(y);

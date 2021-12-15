@@ -346,7 +346,12 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let body = parse_expr(children.next().unwrap(), source);
             RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body).with_ctx(ctx)
         }
-        Rule::rel_expr | Rule::add_expr | Rule::mult_expr | Rule::logic_expr => {
+        Rule::rel_expr
+        | Rule::add_expr
+        | Rule::mult_expr
+        | Rule::logic_expr
+        | Rule::bitlogic_expr
+        | Rule::shift_expr => {
             let mut children: Vec<_> = pair.into_inner().collect();
             let mut toret = parse_expr(children.remove(0), source);
             for pair in children.chunks_exact(2) {
@@ -365,6 +370,11 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                             Rule::lt => BinOp::Lt,
                             Rule::ge => BinOp::Ge,
                             Rule::gt => BinOp::Gt,
+                            Rule::band => BinOp::Band,
+                            Rule::bor => BinOp::Bor,
+                            Rule::bxor => BinOp::Bxor,
+                            Rule::lshift => BinOp::Lshift,
+                            Rule::rshift => BinOp::Rshift,
                             _ => unreachable!(),
                         }
                         .with_ctx(p2ctx(child, source)),

@@ -113,6 +113,13 @@ pub enum BinOp {
     Land,
     Lnot,
 
+    Bor,
+    Band,
+    Bxor,
+
+    Lshift,
+    Rshift,
+
     Append,
 
     Eq,
