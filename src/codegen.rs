@@ -96,6 +96,7 @@ fn codegen_expr(expr: &Expr) -> Value {
                 BinOp::Sub => Value::symbol("-"),
                 BinOp::Mul => Value::symbol("*"),
                 BinOp::Div => Value::symbol("/"),
+                BinOp::Mod => Value::symbol("%"),
                 BinOp::Append => {
                     if x.itype
                         .deunionize()

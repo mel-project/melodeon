@@ -312,6 +312,16 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         TypeFacts::empty(),
                     ))
                 }
+                crate::grammar::BinOp::Mod => {
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::BinOp(BinOp::Mod, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
                 crate::grammar::BinOp::Eq => {
                     check_nats()?;
                     Ok((

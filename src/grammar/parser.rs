@@ -362,6 +362,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                             Rule::sub => BinOp::Sub,
                             Rule::mul => BinOp::Mul,
                             Rule::div => BinOp::Div,
+                            Rule::modulo => BinOp::Mod,
                             Rule::equal => BinOp::Eq,
                             Rule::append => BinOp::Append,
                             Rule::land => BinOp::Land,

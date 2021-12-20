@@ -108,6 +108,7 @@ pub enum BinOp {
     Sub,
     Mul,
     Div,
+    Mod,
 
     Lor,
     Land,
