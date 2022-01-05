@@ -1,4 +1,4 @@
-use std::{ops::Deref, path::Path};
+use std::{ops::Deref, path::Path, sync::Arc};
 
 use dashmap::DashMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -14,10 +14,22 @@ use crate::{
 /// A struct that encapsulates a parallel demodularizer that eliminates "require" and "provide" in a raw AST.
 pub struct Demodularizer {
     cache: DashMap<ModuleId, Ctx<RawProgram>>,
-    fallback: Box<dyn Fn(ModuleId) -> anyhow::Result<String> + Send + Sync + 'static>,
+    fallback: Arc<dyn Fn(ModuleId) -> anyhow::Result<String> + Send + Sync + 'static>,
 }
 
 impl Demodularizer {
+    /// Overrides a particular path in the demodularization cache.
+    pub fn module_override(&mut self, id: ModuleId, content: String) {
+        let fallback = self.fallback.clone();
+        self.fallback = Arc::new(move |i| {
+            if i == id {
+                Ok(content.clone())
+            } else {
+                fallback(i)
+            }
+        })
+    }
+
     /// Creates a new demodularizer, rooted at some filesystem.
     pub fn new_at_fs(root: &Path, global_root: &Path) -> Self {
         let root = root.to_owned();
@@ -47,7 +59,7 @@ impl Demodularizer {
             };
         Self {
             cache: DashMap::new(),
-            fallback: Box::new(fallback),
+            fallback: Arc::new(fallback),
         }
     }
 
