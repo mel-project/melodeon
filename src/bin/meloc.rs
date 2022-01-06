@@ -36,6 +36,8 @@ fn main() {
     }
     let loader = Demodularizer::new_at_fs(Path::new("."), Path::new(&args.lib_dir));
     if let Err(err) = main_inner(args, &loader) {
+        eprintln!("{}", err);
+        /*
         let error_location: String;
         let mut detailed_line: Option<String> = None;
         if let Some(ctx) = err.ctx() {
@@ -84,6 +86,7 @@ fn main() {
                 eprintln!("\t{}", line);
             }
         }
+        */
         std::process::exit(255);
     }
 }

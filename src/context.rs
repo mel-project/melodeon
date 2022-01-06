@@ -1,3 +1,4 @@
+use colored::Colorize;
 use std::{
     fmt::{Debug, Display},
     ops::{Deref, DerefMut},
@@ -89,6 +90,62 @@ impl<T> From<T> for Ctx<T> {
         Ctx {
             inner: val.into(),
             context: None,
+        }
+    }
+}
+
+impl<T: Display> Display for Ctx<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let error_location: String;
+        let mut detailed_line: Option<String> = None;
+        if let Some(ctx) = self.ctx() {
+            if let Ok(source_full_string) =
+                std::fs::read_to_string(Path::new(&ctx.source.to_string()))
+            {
+                let mut char_counter = 0;
+                let mut errloc = ctx.source.to_string();
+                for (lineno, line) in source_full_string.split('\n').enumerate() {
+                    let line_len = line.len() + 1;
+                    if char_counter + line.len() > ctx.start_offset {
+                        let line_offset = ctx.start_offset - char_counter;
+                        errloc = format!("{}:{}", ctx.source, lineno + 1);
+                        detailed_line = Some(format!("{}\n{}", line, {
+                            let mut toret = String::new();
+                            for _ in 0..line_offset {
+                                toret.push(' ');
+                            }
+                            toret.push_str(&format!("{}", "^".bright_green().bold()));
+                            for _ in
+                                1..(ctx.end_offset - ctx.start_offset).min(line.len() - line_offset)
+                            {
+                                toret.push_str(&format!("{}", "~".bright_green().bold()));
+                            }
+                            toret
+                        }));
+                        break;
+                    }
+                    char_counter += line_len
+                }
+                error_location = errloc;
+            } else {
+                error_location = ctx.source.to_string();
+            }
+        } else {
+            error_location = "(unknown location)".to_string();
+        }
+
+        let err_str = format!(
+            "{}: {} {}",
+            error_location.bold(),
+            "error:".bold().red(),
+            self.inner.to_string().bold()
+        );
+
+        if let Some(line) = detailed_line {
+            let lines = line.lines().collect::<Vec<&str>>().join("\n\t");
+            std::fmt::Display::fmt(&format!("{}\n\t{}", err_str, lines), f)
+        } else {
+            std::fmt::Display::fmt(&err_str, f)
         }
     }
 }
