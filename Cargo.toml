@@ -1,6 +1,6 @@
 [package]
 name = "melodeon"
-version = "0.3.8"
+version = "0.3.9-alpha.0"
 edition = "2021"
 description = "High-level language that targets the Themelio blockchains' MelVM covenants"
 license = "ISC"
