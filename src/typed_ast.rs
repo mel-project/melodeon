@@ -74,6 +74,7 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
 #[derive(Debug, Clone)]
 pub enum ExprInner<TVar: Variable, CVar: Variable> {
     BinOp(BinOp, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
+    UniOp(UniOp, Arc<Expr<TVar, CVar>>),
     If(
         Arc<Expr<TVar, CVar>>,
         Arc<Expr<TVar, CVar>>,
@@ -131,6 +132,12 @@ impl<TVar: Variable, CVar: Variable> ExprInner<TVar, CVar> {
             itype: t,
         }
     }
+}
+
+/// Unary operator
+#[derive(Clone, Copy, Debug)]
+pub enum UniOp {
+    Bnot
 }
 
 /// Binary operator

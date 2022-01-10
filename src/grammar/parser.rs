@@ -10,7 +10,7 @@ use tap::Tap;
 use crate::{
     containers::{List, Map, Symbol},
     context::{Ctx, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
-    grammar::BinOp,
+    grammar::{BinOp, UniOp},
 };
 
 use super::{RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr};
@@ -346,46 +346,138 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let body = parse_expr(children.next().unwrap(), source);
             RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body).with_ctx(ctx)
         }
+        /*
+        Rule::bnot => {
+            let mut children = pair.into_inner();
+            let e = parse_expr(children.next().unwrap(), source);
+            RawExpr::UniOp(UniOp::Bnot.with_ctx(ctx), e).with_ctx(ctx)
+        }
+        Rule::lnot => {
+            let mut children = pair.into_inner();
+            let e = parse_expr(children.next().unwrap(), source);
+            RawExpr::UniOp(UniOp::Lnot.with_ctx(ctx), e).with_ctx(ctx)
+        }
+        Rule::uni_expr => {
+            let mut children = pair.into_inner();
+            let op_pair = children.next().expect("Expected a child for uni_expr");
+            let child = parse_expr(children.next().unwrap(), source);
+
+            match op_pair.as_rule() {
+                Rule::lnot => RawExpr::UniOp(UniOp::Lnot.with_ctx(ctx), child).with_ctx(ctx),
+                Rule::bnot => RawExpr::UniOp(UniOp::Bnot.with_ctx(ctx), child).with_ctx(ctx),
+                _ => unreachable!(),
+            }
+        }
+        */
         Rule::rel_expr
         | Rule::add_expr
         | Rule::mult_expr
+        | Rule::uni_expr
         | Rule::logic_expr
         | Rule::bitlogic_expr
         | Rule::shift_expr => {
             let mut children: Vec<_> = pair.into_inner().collect();
-            let mut toret = parse_expr(children.remove(0), source);
+
+            if children.len() == 1 {
+                parse_expr(children.remove(0), source)
+            }
+            else if children.len() == 2 {
+                let c1 = children.remove(0);
+                match c1.as_rule() {
+                    Rule::bnot => {
+                        let child = children.remove(0);
+                        let e = parse_expr(child.clone(), source);
+                        RawExpr::UniOp(UniOp::Bnot.with_ctx(ctx), e).with_ctx(ctx)
+                    }
+                    Rule::lnot => {
+                        let child = children.remove(0);
+                        let e = parse_expr(child.clone(), source);
+                        RawExpr::UniOp(UniOp::Lnot.with_ctx(ctx), e).with_ctx(ctx)
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            else if children.len() == 3 {
+                let c1 = children.remove(0);
+                let op = children.remove(0);
+                let toret = parse_expr(c1, source);
+                let child = children.remove(0);
+                RawExpr::BinOp(
+                    match op.as_rule() {
+                        Rule::add => BinOp::Add,
+                        Rule::sub => BinOp::Sub,
+                        Rule::mul => BinOp::Mul,
+                        Rule::div => BinOp::Div,
+                        Rule::modulo => BinOp::Mod,
+                        Rule::equal => BinOp::Eq,
+                        Rule::append => BinOp::Append,
+                        Rule::land => BinOp::Land,
+                        Rule::lor => BinOp::Lor,
+                        Rule::le => BinOp::Le,
+                        Rule::lt => BinOp::Lt,
+                        Rule::ge => BinOp::Ge,
+                        Rule::gt => BinOp::Gt,
+                        Rule::band => BinOp::Band,
+                        Rule::bor => BinOp::Bor,
+                        Rule::bxor => BinOp::Bxor,
+                        Rule::lshift => BinOp::Lshift,
+                        Rule::rshift => BinOp::Rshift,
+                        _ => unreachable!(),
+                    }
+                    .with_ctx(p2ctx(&op, source)),
+                    toret,
+                    parse_expr(child.clone(), source),
+                )
+                .with_ctx(ctx)
+            }
+            else {
+                panic!("Wrong number of children in expr, {}", children.len());
+            }
+
+            //let mut toret; = parse_expr(children.remove(0), source);
+            /*
             for pair in children.chunks_exact(2) {
                 if let [op, child] = pair {
-                    toret = RawExpr::BinOp(
-                        match op.as_rule() {
-                            Rule::add => BinOp::Add,
-                            Rule::sub => BinOp::Sub,
-                            Rule::mul => BinOp::Mul,
-                            Rule::div => BinOp::Div,
-                            Rule::modulo => BinOp::Mod,
-                            Rule::equal => BinOp::Eq,
-                            Rule::append => BinOp::Append,
-                            Rule::land => BinOp::Land,
-                            Rule::lor => BinOp::Lor,
-                            Rule::le => BinOp::Le,
-                            Rule::lt => BinOp::Lt,
-                            Rule::ge => BinOp::Ge,
-                            Rule::gt => BinOp::Gt,
-                            Rule::band => BinOp::Band,
-                            Rule::bor => BinOp::Bor,
-                            Rule::bxor => BinOp::Bxor,
-                            Rule::lshift => BinOp::Lshift,
-                            Rule::rshift => BinOp::Rshift,
-                            _ => unreachable!(),
-                        }
-                        .with_ctx(p2ctx(child, source)),
-                        toret.clone(),
-                        parse_expr(child.clone(), source),
-                    )
-                    .with_ctx(ctx);
+                    toret = if op.as_rule() == Rule::bnot {
+                        let child = parse_expr(child.clone(), source);
+                        RawExpr::UniOp(UniOp::Bnot.with_ctx(ctx), child).with_ctx(ctx)
+                    } else if op.as_rule() == Rule::lnot {
+                        let child = parse_expr(child.clone(), source);
+                        RawExpr::UniOp(UniOp::Lnot.with_ctx(ctx), child).with_ctx(ctx)
+                    } else {
+                        toret = parse_expr(children.remove(0), source);
+                        RawExpr::BinOp(
+                            match op.as_rule() {
+                                Rule::add => BinOp::Add,
+                                Rule::sub => BinOp::Sub,
+                                Rule::mul => BinOp::Mul,
+                                Rule::div => BinOp::Div,
+                                Rule::modulo => BinOp::Mod,
+                                Rule::equal => BinOp::Eq,
+                                Rule::append => BinOp::Append,
+                                Rule::land => BinOp::Land,
+                                Rule::lor => BinOp::Lor,
+                                Rule::le => BinOp::Le,
+                                Rule::lt => BinOp::Lt,
+                                Rule::ge => BinOp::Ge,
+                                Rule::gt => BinOp::Gt,
+                                Rule::band => BinOp::Band,
+                                Rule::bor => BinOp::Bor,
+                                Rule::bxor => BinOp::Bxor,
+                                Rule::lshift => BinOp::Lshift,
+                                Rule::rshift => BinOp::Rshift,
+                                _ => unreachable!(),
+                            }
+                            .with_ctx(p2ctx(child, source)),
+                            toret.clone(),
+                            parse_expr(child.clone(), source),
+                        )
+                        .with_ctx(ctx)
+                    }
                 }
             }
             toret
+            */
         }
         Rule::extern_call_expr => {
             let mut children = pair.into_inner();

@@ -9,7 +9,7 @@ use crate::{
     containers::{List, Map, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
-    typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
+    typed_ast::{UniOp, BinOp, Expr, ExprInner, FunDefn, Program},
     typesys::{
         typecheck::fold::{cgify_all_slots, partially_erase_cg, solve_recurrence},
         ConstExpr, Type, Variable,
@@ -403,7 +403,6 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         RawExpr::If(a, b, RawExpr::LitNum(0u8.into()).into()).with_ctx(ctx);
                     recurse(desugared)
                 }
-                crate::grammar::BinOp::Lnot => todo!(),
                 crate::grammar::BinOp::Lshift => {
                     check_nats()?;
                     Ok((
@@ -456,6 +455,40 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 }
             }
         }
+        RawExpr::UniOp(op, a) => {
+            let a_expr = recurse(a.clone()).map(|a| a.0);
+            let op = *op.deref();
+
+            // expr must be a number
+            let check_nat = || {
+                let a_expr = a_expr.as_ref().map_err(|e| e.clone())?;
+                assert_subtype(ctx, &a_expr.itype, &Type::all_nat())?;
+                let template: Type<Void, i32> =
+                    Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
+                let a_range = template.unify_cvars(&a_expr.itype).unwrap();
+                Ok::<_, CtxErr>(a_range)
+            };
+            match op {
+                crate::grammar::UniOp::Bnot => {
+                    check_nat()?;
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::UniOp(UniOp::Bnot, a_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                },
+                crate::grammar::UniOp::Lnot => {
+                    let desugared =
+                        RawExpr::If(
+                            a,
+                            RawExpr::LitNum(0u8.into()).into(),
+                            RawExpr::LitNum(1u8.into()).into()).with_ctx(ctx);
+                    recurse(desugared)
+                },
+            }
+        },
         RawExpr::LitNum(num) => Ok((
             Expr {
                 itype: Type::NatRange(num.into(), num.into()),
@@ -1343,6 +1376,9 @@ fn monomorphize_inner(
     let recurse = |b| monomorphize_inner(fun_defs, b, mangled, tvar_scope, cvar_scope);
     Expr {
         inner: match body.inner.clone() {
+            ExprInner::UniOp(op, a) => {
+                ExprInner::UniOp(op, recurse(&a).into())
+            }
             ExprInner::BinOp(op, a, b) => {
                 ExprInner::BinOp(op, recurse(&a).into(), recurse(&b).into())
             }

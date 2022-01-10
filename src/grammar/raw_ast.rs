@@ -75,6 +75,7 @@ pub enum RawExpr {
     Fail,
 
     BinOp(Ctx<BinOp>, Ctx<RawExpr>, Ctx<RawExpr>),
+    UniOp(Ctx<UniOp>, Ctx<RawExpr>),
     LitNum(U256),
     LitBytes(Bytes),
     LitBVec(List<Ctx<Self>>),
@@ -101,6 +102,13 @@ pub enum RawExpr {
     ExternApply(Ctx<String>, List<Ctx<Self>>),
 }
 
+/// Unary operator
+#[derive(Clone, Copy, Debug)]
+pub enum UniOp {
+    Bnot,
+    Lnot,
+}
+
 /// Binary operator
 #[derive(Clone, Copy, Debug)]
 pub enum BinOp {
@@ -112,7 +120,6 @@ pub enum BinOp {
 
     Lor,
     Land,
-    Lnot,
 
     Bor,
     Band,
@@ -295,6 +302,7 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::VectorUpdate(v, old, new) => rec(v).union(rec(old)).union(rec(new)),
         RawExpr::VectorSlice(v, from, to) => rec(v).union(rec(from)).union(rec(to)),
         RawExpr::If(p, t, f) => rec(p).union(rec(t)).union(rec(f)),
+        RawExpr::UniOp(_, a) => rec(a),
         RawExpr::BinOp(_, a, b) => rec(a).union(rec(b)),
         RawExpr::Field(strct, _) => rec(strct),
         RawExpr::LitVec(v) | RawExpr::LitBVec(v) => {

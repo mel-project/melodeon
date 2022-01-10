@@ -209,6 +209,7 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
             )
         }
         RawExpr::If(cond, a, b) => RawExpr::If(recurse(cond), recurse(a), recurse(b)),
+        RawExpr::UniOp(op, a) => RawExpr::UniOp(op, recurse(a)),
         RawExpr::BinOp(op, a, b) => RawExpr::BinOp(op, recurse(a), recurse(b)),
         RawExpr::LitNum(a) => RawExpr::LitNum(a),
         RawExpr::LitVec(v) => RawExpr::LitVec(v.into_iter().map(recurse).collect()),

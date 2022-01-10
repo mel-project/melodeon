@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use crate::{
     containers::Symbol,
-    typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program},
+    typed_ast::{UniOp, BinOp, Expr, ExprInner, FunDefn, Program},
     typesys::Type,
 };
 use ethnum::U256;
@@ -90,6 +90,13 @@ fn codegen_expr(expr: &Expr) -> Value {
             ]
             .sexpr()
         }
+        ExprInner::UniOp(op, x) => {
+            let op = match op {
+                UniOp::Bnot => Value::symbol("not"),
+            };
+            let x = codegen_expr(x);
+            [op, x].sexpr()
+        },
         ExprInner::BinOp(op, x, y) => {
             let op = match op {
                 BinOp::Add => Value::symbol("+"),
