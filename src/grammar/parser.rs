@@ -134,10 +134,13 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
         Rule::require_lib => {
             let ctx = p2ctx(&pair, source);
             let children: Vec<_> = pair.into_inner().map(|p| p.as_str().to_string()).collect();
+            RawDefn::Require(source.relative(&children.join("/")))
+            /*
             RawDefn::Require(ModuleId::from_path(Path::new(&format!(
                 "${}",
                 children.join("/")
             ))))
+            */
             .with_ctx(ctx)
         }
         Rule::provide => {

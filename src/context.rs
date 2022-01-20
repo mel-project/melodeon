@@ -173,6 +173,8 @@ impl Display for ModuleId {
 impl ModuleId {
     /// Create a new one from a Path.
     pub fn from_path(path: &Path) -> Self {
+        //println!("from path {:?}", path);
+        //let canon = path.canonicalize().unwrap().to_string_lossy().into_owned();
         let canon = path.to_string_lossy().into_owned();
         ModuleId {
             absolute_path: Intern::new(canon),
