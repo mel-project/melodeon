@@ -839,6 +839,18 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .with_ctx(ctx))
             }
         }
+        RawExpr::Exp(k, a, b) => {
+            let k = typecheck_const_expr(&state, k)?;
+            let a: std::sync::Arc<Expr<Tv, Cv>> = recurse(a)?.0.into();
+            let b: std::sync::Arc<Expr<Tv, Cv>> = recurse(b)?.0.into();
+            Ok((
+                Expr {
+                    itype: a.itype.smart_union(&b.itype),
+                    inner: ExprInner::Exp(k, a, b),
+                },
+                TypeFacts::empty(),
+            ))
+        }
         RawExpr::Loop(iterations, body, end) => {
             let iterations = typecheck_const_expr(&state, iterations)?;
             let body = body
@@ -1140,7 +1152,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .map(|arg| {
                     let ctx = arg.ctx();
                     let arg = recurse(arg)?.0;
-                    if !arg.itype.subtype_of(&Type::NatRange(0.into(), 255.into())) {
+                    if !arg.itype.subtype_of(&Type::NatRange(0_i32.into(), 255_i32.into())) {
                         Err(anyhow::anyhow!(
                             "element in bytes must be byte-valued, got {:?} instead",
                             arg.itype
@@ -1387,6 +1399,11 @@ fn monomorphize_inner(
                 recurse(&a).into(),
                 recurse(&b).into(),
             ),
+            ExprInner::Exp(k, a, b) => ExprInner::Exp(
+                k.fill(|c| cvar_scope.get(c).cloned().unwrap()),
+                recurse(&a).into(),
+                recurse(&b).into(),
+            ),
             ExprInner::Let(s, b, i) => ExprInner::Let(s, recurse(&b).into(), recurse(&i).into()),
             ExprInner::Apply(f, args) => {
                 // we must monomorphize the function too
@@ -1515,7 +1532,7 @@ mod tests {
             "{:#?}",
             typecheck_expr(
                 state,
-                parse_program("1 as Nat", module).unwrap().body.clone()
+                parse_program("1 :: Nat", module).unwrap().body.clone()
             )
             .unwrap()
         );

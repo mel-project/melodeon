@@ -75,6 +75,7 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
 pub enum ExprInner<TVar: Variable, CVar: Variable> {
     BinOp(BinOp, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     UniOp(UniOp, Arc<Expr<TVar, CVar>>),
+    Exp(ConstExpr<CVar>, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     If(
         Arc<Expr<TVar, CVar>>,
         Arc<Expr<TVar, CVar>>,
@@ -163,4 +164,10 @@ pub enum BinOp {
 
     Lshift,
     Rshift,
+}
+
+/// Ternary operator
+#[derive(Clone, Copy, Debug)]
+pub enum TriOp {
+    Exp,
 }

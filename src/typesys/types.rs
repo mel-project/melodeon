@@ -915,6 +915,15 @@ impl<CVar: Variable> ConstExpr<CVar> {
         let their_poly = Polynomial::from(other);
         Some(my_poly.checked_sub(their_poly)?.into())
     }
+
+    /*
+    pub fn pow(&self, other: &Self) -> Self {
+        //let lower = self[&0].simplify();
+        //ConstExpr::Lit(
+        let mut res = self.clone();
+        0..
+    }
+    */
 }
 
 impl ConstExpr<Void> {

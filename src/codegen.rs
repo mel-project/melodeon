@@ -129,13 +129,29 @@ fn codegen_expr(expr: &Expr) -> Value {
             let y = codegen_expr(y);
             [op, x, y].sexpr()
         }
+        /*
+        ExprInner::TriOp(op, x, y, z) => {
+            match op {
+                TriOp::Exp => [
+                    Value::symbol("**"),
+                    Value::Number(z.eval().as_u8().into()),
+                    x, y
+                ].sexpr(),
+            }
+        }
+        */
+        ExprInner::Exp(k, x, y) => [
+            Value::symbol("**"),
+            Value::Number(k.eval().as_u8().into()),
+            codegen_expr(x),
+            codegen_expr(y),
+        ].sexpr(),
         ExprInner::If(a, b, c) => [
             Value::symbol("if"),
             codegen_expr(a),
             codegen_expr(b),
             codegen_expr(c),
-        ]
-        .sexpr(),
+        ].sexpr(),
         ExprInner::Let(v, b, i) => [
             Value::symbol("let"),
             [Value::symbol(v.to_string()), codegen_expr(b)].sexpr(),
@@ -453,7 +469,7 @@ mod tests {
                         def succ<$n>(x: {$n..$n}) = $n + 1
                         def peel<$n>(x : {$n+1..$n+1}) = $n
                         --- 
-                        let x = 0 in
+                        let x = 0 :: Nat in
                         loop 100 do
                             set! x = x + 1
                         done with x

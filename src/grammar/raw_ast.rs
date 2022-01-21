@@ -72,6 +72,7 @@ pub enum RawExpr {
     For(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     ForFold(Ctx<Symbol>, Ctx<Self>, Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     If(Ctx<Self>, Ctx<Self>, Ctx<Self>),
+    Exp(Ctx<RawConstExpr>, Ctx<Self>, Ctx<Self>),
     Fail,
 
     BinOp(Ctx<BinOp>, Ctx<RawExpr>, Ctx<RawExpr>),
@@ -317,6 +318,7 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::Fail => Set::new(),
         RawExpr::LitNum(_) => Set::new(),
         RawExpr::CgVar(_) => Set::new(),
+        RawExpr::Exp(_, a, b) => rec(a).union(rec(b)),
         RawExpr::Loop(_, body, inner) => body
             .iter()
             .map(|a| rec(&a.1))
