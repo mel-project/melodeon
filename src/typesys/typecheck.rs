@@ -684,7 +684,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             }
             Ok((
                 Expr {
-                    itype: Type::NatRange(0.into(), 1.into()),
+                    itype: Type::NatRange(0_i32.into(), 1_i32.into()),
                     inner: ExprInner::IsType(x, t.clone()),
                 },
                 TypeFacts::empty().with_mapping(x, t),
@@ -839,13 +839,23 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .with_ctx(ctx))
             }
         }
-        RawExpr::Exp(k, a, b) => {
-            let k = typecheck_const_expr(&state, k)?;
+        RawExpr::Exp(a, b) => {
+            // TODO infer this from b
+            let k = ConstExpr::Lit(255_u32.into());
             let a: std::sync::Arc<Expr<Tv, Cv>> = recurse(a)?.0.into();
-            let b: std::sync::Arc<Expr<Tv, Cv>> = recurse(b)?.0.into();
+            let b = typecheck_const_expr(&state, b)?;
+
+            // Check that a is Nat
+            assert_subtype(ctx, &a.itype, &Type::all_nat())?;
+            /*
+            let template: Type<Void, i32> =
+                Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
+            let a_range = template.unify_cvars(&a_expr.itype).unwrap();
+            */
+
             Ok((
                 Expr {
-                    itype: a.itype.smart_union(&b.itype),
+                    itype: a.itype.clone(),
                     inner: ExprInner::Exp(k, a, b),
                 },
                 TypeFacts::empty(),
@@ -1402,7 +1412,7 @@ fn monomorphize_inner(
             ExprInner::Exp(k, a, b) => ExprInner::Exp(
                 k.fill(|c| cvar_scope.get(c).cloned().unwrap()),
                 recurse(&a).into(),
-                recurse(&b).into(),
+                b.fill(|c| cvar_scope.get(c).cloned().unwrap()),
             ),
             ExprInner::Let(s, b, i) => ExprInner::Let(s, recurse(&b).into(), recurse(&i).into()),
             ExprInner::Apply(f, args) => {

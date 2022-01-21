@@ -381,33 +381,38 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 let mut toret = parse_expr(children.remove(0), source);
                 for pair in children.chunks_exact(2) {
                     if let [op, child] = pair {
-                        toret = RawExpr::BinOp(
-                            match op.as_rule() {
-                                Rule::add => BinOp::Add,
-                                Rule::sub => BinOp::Sub,
-                                Rule::mul => BinOp::Mul,
-                                Rule::div => BinOp::Div,
-                                Rule::modulo => BinOp::Mod,
-                                Rule::equal => BinOp::Eq,
-                                Rule::append => BinOp::Append,
-                                Rule::land => BinOp::Land,
-                                Rule::lor => BinOp::Lor,
-                                Rule::le => BinOp::Le,
-                                Rule::lt => BinOp::Lt,
-                                Rule::ge => BinOp::Ge,
-                                Rule::gt => BinOp::Gt,
-                                Rule::band => BinOp::Band,
-                                Rule::bor => BinOp::Bor,
-                                Rule::bxor => BinOp::Bxor,
-                                Rule::lshift => BinOp::Lshift,
-                                Rule::rshift => BinOp::Rshift,
-                                _ => unreachable!(),
-                            }
-                            .with_ctx(p2ctx(&op, source)),
-                            toret.clone(),
-                            parse_expr(child.clone(), source),
-                        )
-                        .with_ctx(ctx);
+                        toret = if op.as_rule() == Rule::exp {
+                            RawExpr::Exp(toret.clone(), parse_const_expr(child.clone(), source))
+                                .with_ctx(ctx)
+                        } else {
+                            RawExpr::BinOp(
+                                match op.as_rule() {
+                                    Rule::add => BinOp::Add,
+                                    Rule::sub => BinOp::Sub,
+                                    Rule::mul => BinOp::Mul,
+                                    Rule::div => BinOp::Div,
+                                    Rule::modulo => BinOp::Mod,
+                                    Rule::equal => BinOp::Eq,
+                                    Rule::append => BinOp::Append,
+                                    Rule::land => BinOp::Land,
+                                    Rule::lor => BinOp::Lor,
+                                    Rule::le => BinOp::Le,
+                                    Rule::lt => BinOp::Lt,
+                                    Rule::ge => BinOp::Ge,
+                                    Rule::gt => BinOp::Gt,
+                                    Rule::band => BinOp::Band,
+                                    Rule::bor => BinOp::Bor,
+                                    Rule::bxor => BinOp::Bxor,
+                                    Rule::lshift => BinOp::Lshift,
+                                    Rule::rshift => BinOp::Rshift,
+                                    _ => unreachable!(),
+                                }
+                                .with_ctx(p2ctx(&op, source)),
+                                toret.clone(),
+                                parse_expr(child.clone(), source),
+                            )
+                            .with_ctx(ctx)
+                        }
                     }
                 }
                 toret

@@ -129,22 +129,11 @@ fn codegen_expr(expr: &Expr) -> Value {
             let y = codegen_expr(y);
             [op, x, y].sexpr()
         }
-        /*
-        ExprInner::TriOp(op, x, y, z) => {
-            match op {
-                TriOp::Exp => [
-                    Value::symbol("**"),
-                    Value::Number(z.eval().as_u8().into()),
-                    x, y
-                ].sexpr(),
-            }
-        }
-        */
-        ExprInner::Exp(k, x, y) => [
+        ExprInner::Exp(k, base, exp) => [
             Value::symbol("**"),
             Value::Number(k.eval().as_u8().into()),
-            codegen_expr(x),
-            codegen_expr(y),
+            codegen_expr(base),
+            u256_to_sexpr(exp.eval()),
         ].sexpr(),
         ExprInner::If(a, b, c) => [
             Value::symbol("if"),
