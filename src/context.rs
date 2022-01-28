@@ -10,6 +10,7 @@ use std::{
 };
 
 use dashmap::DashMap;
+use std::path::PathBuf;
 use internment::Intern;
 use once_cell::sync::Lazy;
 
@@ -161,6 +162,7 @@ pub struct CtxLocation {
 /// Represents the unique ID of a module.
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
 pub struct ModuleId {
+    /// Relative path from the project root directory
     absolute_path: Intern<String>,
 }
 
@@ -171,6 +173,14 @@ impl Display for ModuleId {
 }
 
 impl ModuleId {
+    pub fn new(path: &Path) -> Self {
+        // TODO make this some inner module representation so that it doesn't differ by OS
+        let canon = path.to_string_lossy().into_owned();
+        ModuleId {
+            absolute_path: Intern::new(canon),
+        }
+    }
+
     /// Create a new one from a Path.
     pub fn from_path(path: &Path) -> Self {
         //println!("from path {:?}", path);
@@ -204,5 +214,16 @@ impl ModuleId {
         *CACHE
             .entry(self)
             .or_insert_with(|| GCOUNTER.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+/// Project root directory
+#[derive(Clone)]
+pub struct ProjectRoot(pub PathBuf);
+
+impl ProjectRoot {
+    /// Create a [ModuleId] relative to the root directory
+    pub fn module_from_root(self, path: &Path) -> ModuleId {
+        ModuleId::new(&self.0.join(path))
     }
 }

@@ -64,7 +64,7 @@ impl Demodularizer {
     }
 
     /// Return the demodularized version of some module ID.
-    pub fn demod(&self, id: ModuleId) -> CtxResult<Ctx<RawProgram>> {
+    pub fn demod(&self, id: ModuleId, root: &Path) -> CtxResult<Ctx<RawProgram>> {
         if let Some(res) = self.cache.get(&id) {
             log::debug!("demod {} HIT!", id);
             Ok(res.deref().clone())
@@ -72,7 +72,7 @@ impl Demodularizer {
             log::debug!("demod {} MISS!", id);
             // populate the cache
             let raw_string = (self.fallback)(id).err_ctx(None)?;
-            let parsed = parse_program(&raw_string, id)?;
+            let parsed = parse_program(&raw_string, id, root)?;
             // go through the dependencies in parallel, demodularizing as we go
             let mut new_defs = parsed
                 .definitions
@@ -83,7 +83,7 @@ impl Demodularizer {
                         let mut accum = accum?;
                         match def.deref() {
                             RawDefn::Require(other) => {
-                                let other_demodularized = self.demod(*other)?;
+                                let other_demodularized = self.demod(*other, root)?;
                                 accum.append(mangle(
                                     other_demodularized.definitions.clone(),
                                     *other,
@@ -106,8 +106,8 @@ impl Demodularizer {
             let stdlib = parse_program(
                 include_str!("stdlib.melo"),
                 ModuleId::from_path(Path::new("STDLIB")),
-            )
-            .unwrap();
+                root,
+            ).unwrap();
             new_defs.append(stdlib.definitions.clone());
             Ok(RawProgram {
                 definitions: new_defs,

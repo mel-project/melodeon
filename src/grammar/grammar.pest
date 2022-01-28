@@ -63,7 +63,7 @@ struct_def = { "struct" ~ type_name ~ "{" ~ fun_args ~ "}" }
 struct_def_gen = { "struct" ~ "<" ~ generic_params ~ ">" ~ "{" ~ fun_args ~ "}"}
 
 require = { "require" ~ string_literal }
-require_lib = { "require" ~ (var_name ~ "/")* ~ var_name }
+require_lib = { "import" ~ (var_name ~ "::")* ~ var_name }
 provide = { "provide" ~ (var_name | type_name) }
 alias   = { "type" ~ type_name ~ "=" ~ type_expr }
 

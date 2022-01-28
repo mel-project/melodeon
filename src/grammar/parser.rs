@@ -9,14 +9,14 @@ use tap::Tap;
 
 use crate::{
     containers::{List, Map, Symbol},
-    context::{Ctx, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
+    context::{ProjectRoot, Ctx, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
     grammar::{BinOp, UniOp},
 };
 
 use super::{RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr};
 
 /// Parse a string as an entire program.
-pub fn parse_program(input: &str, source: ModuleId) -> CtxResult<Ctx<RawProgram>> {
+pub fn parse_program(input: &str, source: ModuleId, root: &Path) -> CtxResult<Ctx<RawProgram>> {
     log::debug!("parsing {} chars at {}", input.len(), source);
     let root_ctx = CtxLocation {
         source,
@@ -55,7 +55,7 @@ pub fn parse_program(input: &str, source: ModuleId) -> CtxResult<Ctx<RawProgram>
     let definitions: List<Ctx<RawDefn>> = children
         .iter()
         .filter(|child| child.as_rule() == Rule::definition)
-        .map(|child| parse_definition(child.clone().into_inner().next().unwrap(), source))
+        .map(|child| parse_definition(child.clone().into_inner().next().unwrap(), source, root))
         .collect();
     let body = if let Some(last_child) = children
         .into_iter()
@@ -68,7 +68,7 @@ pub fn parse_program(input: &str, source: ModuleId) -> CtxResult<Ctx<RawProgram>
     Ok(RawProgram { definitions, body }.with_ctx(Some(ctx)))
 }
 
-fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
+fn parse_definition(pair: Pair<Rule>, source: ModuleId, root: &Path) -> Ctx<RawDefn> {
     log::trace!("defn rule {:?} on {:?}", pair.as_rule(), pair.as_str());
     match pair.as_rule() {
         Rule::fun_def | Rule::fun_def_gen => {
@@ -134,13 +134,16 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawDefn> {
         Rule::require_lib => {
             let ctx = p2ctx(&pair, source);
             let children: Vec<_> = pair.into_inner().map(|p| p.as_str().to_string()).collect();
-            RawDefn::Require(source.relative(&children.join("/")))
-            /*
-            RawDefn::Require(ModuleId::from_path(Path::new(&format!(
-                "${}",
-                children.join("/")
-            ))))
-            */
+            let lib_path = &root.join(&children.join("/"));
+            let root = ProjectRoot(root.to_path_buf());
+            if !lib_path.exists() {
+                //println!("{:?}", RawDefn::Require(root.clone().module_from_root(&lib_path.with_extension("melo"))));
+                // Module is a single file
+                RawDefn::Require(root.module_from_root(&lib_path.with_extension("melo")))
+            } else {
+                // Module is a sub-directory
+                RawDefn::Require(root.module_from_root(&lib_path.join("main.melo")))
+            }
             .with_ctx(ctx)
         }
         Rule::provide => {
@@ -591,7 +594,8 @@ mod tests {
                     let ctr = 0 :: Nat in
                     accum
             "#,
-                ModuleId::from_path(Path::new("placeholder.melo"))
+                ModuleId::from_path(Path::new("placeholder.melo")),
+                &std::path::PathBuf::from(""),
             )
             .unwrap()
         );

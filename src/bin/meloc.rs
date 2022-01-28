@@ -44,7 +44,9 @@ fn main() {
 
 fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
     let raw_input = time_stage("parse+demod", || {
-        loader.demod(ModuleId::from_path(Path::new(&args.input)))
+        let mut root = std::path::PathBuf::from(args.input.clone());
+        root.pop();
+        loader.demod(ModuleId::from_path(Path::new(&args.input)), &root)
     })?;
     let tchecked = time_stage("typecheck", || typecheck_program(raw_input))?;
     let product = time_stage("codegen", || codegen_program(tchecked));

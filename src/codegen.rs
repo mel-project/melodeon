@@ -462,8 +462,9 @@ mod tests {
                         loop 100 do
                             set! x = x + 1
                         done with x
-                ",
-                        module
+                        ",
+                        module,
+                        &std::path::PathBuf::from(""),
                     )
                     .unwrap()
                 )

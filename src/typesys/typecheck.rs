@@ -1542,7 +1542,7 @@ mod tests {
             "{:#?}",
             typecheck_expr(
                 state,
-                parse_program("1 :: Nat", module).unwrap().body.clone()
+                parse_program("1 :: Nat", module, &std::path::PathBuf::from("")).unwrap().body.clone()
             )
             .unwrap()
         );
@@ -1566,7 +1566,8 @@ loop 100 do
 set! x = x + 1
 done with x
                 ",
-                    module
+                    module,
+                    &std::path::PathBuf::from(""),
                 )
                 .unwrap()
             )
