@@ -15,9 +15,15 @@ pub fn compile(melo_code: &str, module_path: &Path) -> context::CtxResult<String
     let mut root_path = module_path.canonicalize()
      .map_err(|ctx| anyhow::anyhow!(format!("Failed to get absolute path for input file\n{}", ctx)))?;
     if root_path.is_file() { root_path.pop(); }
+    let fname = module_path.file_name();
 
+    println!("module path: {module_path:?}");
     let mut demod = Demodularizer::new_at_fs(&root_path, &root_path.join("melo-libs"));
-    let modid = context::ProjectRoot(root_path.clone()).module_from_root(Path::new("."));
+    let modid = if let Some(f) = fname {
+        context::ProjectRoot(root_path.clone()).module_from_root(f.as_ref())
+    } else {
+        context::ProjectRoot(root_path.clone()).module_from_root(Path::new("."))
+    };
     demod.module_override(modid, melo_code.to_string());
 
     let raw = demod.demod(modid, &root_path)?;
