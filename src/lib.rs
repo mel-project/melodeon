@@ -17,7 +17,6 @@ pub fn compile(melo_code: &str, module_path: &Path) -> context::CtxResult<String
     if root_path.is_file() { root_path.pop(); }
     let fname = module_path.file_name();
 
-    println!("module path: {module_path:?}");
     let mut demod = Demodularizer::new_at_fs(&root_path, &root_path.join("melo-libs"));
     let modid = if let Some(f) = fname {
         context::ProjectRoot(root_path.clone()).module_from_root(f.as_ref())
