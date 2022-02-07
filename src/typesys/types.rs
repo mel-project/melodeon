@@ -939,6 +939,12 @@ impl<CVar: Variable> From<i32> for ConstExpr<CVar> {
     }
 }
 
+impl<CVar: Variable> From<u32> for ConstExpr<CVar> {
+    fn from(i: u32) -> Self {
+        ConstExpr::Lit((i as u64).into())
+    }
+}
+
 impl<CVar: Variable> From<usize> for ConstExpr<CVar> {
     fn from(i: usize) -> Self {
         ConstExpr::Lit((i as u64).into())

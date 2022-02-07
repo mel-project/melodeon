@@ -68,7 +68,8 @@ pub enum RawConstExpr {
 /// A raw expression.
 #[derive(Clone, Debug)]
 pub enum RawExpr {
-    Let(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
+    //Let(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
+    Let(List<(Ctx<Symbol>, Ctx<Self>)>, Ctx<Self>),
     For(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     ForFold(Ctx<Symbol>, Ctx<Self>, Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     If(Ctx<Self>, Ctx<Self>, Ctx<Self>),
@@ -292,7 +293,15 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
     match expr {
         // Important cases
         RawExpr::Var(var) => Set::unit(*var),
-        RawExpr::Let(var, val, body) => rec(val).union(rec(body)).without(var),
+        //RawExpr::Let(var, val, body) => rec(val).union(rec(body)).without(var),
+        RawExpr::Let(binds, body) => {
+            let vars: Vec<Ctx<Symbol>> = binds.iter().map(|(v,_)| v.clone()).collect();
+            let vals: Vec<Ctx<RawExpr>> = binds.iter().map(|(_,v)| v.clone()).collect();
+            vars.iter().fold(
+                vals.iter().fold(Set::new(), |acc, v| acc.union(rec(v)))
+                    .union(rec(body)),
+                |acc,var| acc.without(var))
+        }
         RawExpr::Apply(fn_name, args) => args
             .into_iter()
             .fold(rec(fn_name), |acc, arg| acc.union(rec(arg))),

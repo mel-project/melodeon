@@ -316,12 +316,21 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             RawExpr::If(condition, x, RawExpr::Fail.into()).with_ctx(ctx)
         }
         Rule::let_expr => {
-            let mut children = pair.into_inner();
-            let var_name = children.next().unwrap();
-            let var_name = Symbol::from(var_name.as_str()).with_ctx(p2ctx(&var_name, source));
-            let var_binding = parse_expr(children.next().unwrap(), source);
-            let body = parse_expr(children.next().unwrap(), source);
-            RawExpr::Let(var_name, var_binding, body).with_ctx(ctx)
+            let mut children: Vec<_> = pair.into_inner().collect();
+
+            let bindings = children
+                .chunks_exact(2)
+                //.map(|[sym, value]| {
+                .map(|chunk| {
+                    let sym = chunk[0].clone();
+                    let value = chunk[1].clone();
+                    let var_name = Symbol::from(sym.as_str()).with_ctx(p2ctx(&sym, source));
+                    let var_binding = parse_expr(value, source);
+                    (var_name, var_binding)
+                }).collect();
+
+            let body = parse_expr(children.last().unwrap().clone(), source);
+            RawExpr::Let(bindings, body).with_ctx(ctx)
         }
         Rule::let_q_expr => {
             let mut children = pair.into_inner();
@@ -331,7 +340,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let body = parse_expr(children.next().unwrap(), source);
             let body_container =
                 RawExpr::BinOp(BinOp::Land.into(), RawExpr::Var(*var_name).into(), body);
-            RawExpr::Let(var_name, var_binding, body_container.into()).with_ctx(ctx)
+            RawExpr::Let([(var_name, var_binding)].into(), body_container.into()).with_ctx(ctx)
         }
         Rule::for_expr => {
             let mut children = pair.into_inner();

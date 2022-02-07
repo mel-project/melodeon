@@ -141,9 +141,12 @@ fn codegen_expr(expr: &Expr) -> Value {
             codegen_expr(b),
             codegen_expr(c),
         ].sexpr(),
-        ExprInner::Let(v, b, i) => [
+        ExprInner::Let(binds, i) => [
             Value::symbol("let"),
-            [Value::symbol(v.to_string()), codegen_expr(b)].sexpr(),
+            binds.iter()
+                .fold(vec![], |acc, (var,val)|
+                    [acc, vec![Value::symbol(var.to_string()), codegen_expr(val)]].concat())
+                .sexpr(),
             codegen_expr(i),
         ]
         .sexpr(),

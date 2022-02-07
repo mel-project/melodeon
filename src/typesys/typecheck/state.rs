@@ -33,6 +33,14 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
         self
     }
 
+    /// Binds a list of variables.
+    pub fn bind_vars(mut self, binds: List<(Symbol, Type<TVar, CVar>)>) -> Self {
+        for (s,t) in binds.into_iter() {
+            self.variable_scope.insert(s, t);
+        }
+        self
+    }
+
     /// Binds a const-generic variable.
     pub fn bind_cgvar(mut self, s: Symbol, v: ConstExpr<CVar>) -> Self {
         self.cg_scope.insert(s, v);

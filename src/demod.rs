@@ -199,12 +199,14 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
     let recurse = |expr| mangle_expr(expr, source, no_mangle);
     let ctx = expr.ctx();
     match expr.deref().clone() {
-        RawExpr::Let(sym, bind, body) => {
+        RawExpr::Let(binds, body) => {
             let mut inner_no_mangle = no_mangle.clone();
-            inner_no_mangle.insert(*sym);
+            for (sym, _) in binds.iter() {
+                inner_no_mangle.insert(*sym.deref());
+            }
+
             RawExpr::Let(
-                sym,
-                recurse(bind),
+                binds.into_iter().map(|(s,v)| (s, recurse(v))).collect(),
                 mangle_expr(body, source, &inner_no_mangle),
             )
         }

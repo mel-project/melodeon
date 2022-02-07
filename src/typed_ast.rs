@@ -39,7 +39,10 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
             ExprInner::If(c, a, b) => {
                 ExprInner::If(recurse(c).into(), recurse(a).into(), recurse(b).into())
             }
-            ExprInner::Let(s, b, i) => ExprInner::Let(*s, recurse(b).into(), recurse(i).into()),
+            //ExprInner::Let(s, b, i) => ExprInner::Let(*s, recurse(b).into(), recurse(i).into()),
+            ExprInner::Let(binds, i) => ExprInner::Let(
+                binds.iter().map(|(s,b)| (*s, recurse(b).into())).collect(),
+                recurse(i).into()),
             ExprInner::Apply(f, args) => ExprInner::Apply(*f, args.iter().map(recurse).collect()),
             ExprInner::ApplyGeneric(f, tg, cg, args) => ExprInner::ApplyGeneric(
                 *f,
@@ -81,7 +84,8 @@ pub enum ExprInner<TVar: Variable, CVar: Variable> {
         Arc<Expr<TVar, CVar>>,
         Arc<Expr<TVar, CVar>>,
     ),
-    Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
+    //Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
+    Let(List<(Symbol, Arc<Expr<TVar, CVar>>)>, Arc<Expr<TVar, CVar>>),
     Apply(Symbol, List<Expr<TVar, CVar>>),
     ExternApply(String, List<Expr<TVar, CVar>>),
     Extern(String),
