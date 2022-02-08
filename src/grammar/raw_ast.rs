@@ -3,6 +3,7 @@ use ethnum::U256;
 use tap::Pipe;
 
 use crate::{
+    typesys::{Type, Variable},
     containers::{List, Map, Set, Symbol},
     context::{Ctx, ModuleId},
 };
@@ -284,6 +285,14 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
         RawTypeExpr::DynVectorof(v) => rec(v),
         RawTypeExpr::Bytes(_) => Set::new(),
         RawTypeExpr::DynBytes => Set::new(),
+    }
+}
+
+impl RawExpr {
+    pub fn free_variables<Tv: Variable, Cv: Variable>(&self, var_set: &Map<Symbol, Type<Tv,Cv>>)
+    -> Set<Symbol> {
+        let vars = expr_parents(self);
+        vars.into_iter().filter(|sym| !var_set.contains_key(sym)).collect()
     }
 }
 

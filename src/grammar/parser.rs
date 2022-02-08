@@ -550,6 +550,14 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .into_iter()
                 .map(|c| parse_setbang(c, source))
                 .collect();
+            /*
+            let free_vars = inner.iter().map(|(sym, val)| val.free_variables());
+
+            RawExpr::Let(
+                free_vars.into_iter().map(|sym| (sym, sym)).collect(),
+                RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx),
+            ).with_ctx(ctx)
+            */
             RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx)
         }
         Rule::string_literal => {

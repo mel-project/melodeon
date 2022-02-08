@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use tap::Tap;
 
 use crate::{
-    containers::{List, Map, Symbol, Void},
+    containers::{List, Map, Symbol, Void, Set},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{UniOp, BinOp, Expr, ExprInner, FunDefn, Program},
@@ -900,6 +900,11 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         }
         RawExpr::Loop(iterations, body, end) => {
             let iterations = typecheck_const_expr(&state, iterations)?;
+            //let free_vars = body.iter().map(|(sym, val)| val.free_variables(state.var_scope()));
+            let var_scope = state.var_scope();
+            let free_vars = body.iter()
+                .fold(Set::new(), |acc, (sym, val)| acc.union(val.free_variables(&var_scope).update(*sym)));
+
             let body = body
                 .into_iter()
                 .map(|(s, v)| {
@@ -920,7 +925,20 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             Ok((
                 Expr {
                     itype: end.itype.clone(),
-                    inner: ExprInner::Loop(iterations, body, end.into()),
+                    //inner: ExprInner::Loop(iterations, body, end.into()),
+                    inner: ExprInner::Let(
+                        free_vars.into_iter().map(|sym|
+                            (sym,
+                             Expr {
+                                itype: state.lookup_var(sym).expect("Expected binding to be available, this is a bug."),
+                                inner: ExprInner::Var(sym),
+                             }.into()),
+                         ).collect(),
+                        Expr {
+                            itype: end.itype.clone(),
+                            inner: ExprInner::Loop(iterations, body, end.into()).into(),
+                        }.into(),
+                    ),
                 },
                 TypeFacts::empty(),
             ))

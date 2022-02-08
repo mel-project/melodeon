@@ -90,6 +90,10 @@ impl<TVar: Variable, CVar: Variable> TypecheckState<TVar, CVar> {
         self.function_scope.get(&name).cloned()
     }
 
+    pub fn var_scope(&self) -> Map<Symbol, Type<TVar, CVar>> {
+        self.variable_scope.clone()
+    }
+
     /// Applies some type facts
     pub fn with_facts(mut self, facts: &TypeFacts<TVar, CVar>) -> Self {
         log::trace!("with facts {:?}", facts);
