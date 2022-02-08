@@ -292,7 +292,7 @@ impl RawExpr {
     pub fn free_variables<Tv: Variable, Cv: Variable>(&self, var_set: &Map<Symbol, Type<Tv,Cv>>)
     -> Set<Symbol> {
         let vars = expr_parents(self);
-        vars.into_iter().filter(|sym| !var_set.contains_key(sym)).collect()
+        vars.into_iter().filter(|sym| var_set.contains_key(sym)).collect()
     }
 }
 

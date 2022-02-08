@@ -927,12 +927,12 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     itype: end.itype.clone(),
                     //inner: ExprInner::Loop(iterations, body, end.into()),
                     inner: ExprInner::Let(
-                        free_vars.into_iter().map(|sym|
+                        free_vars.into_iter().map(|sym| {
                             (sym,
                              Expr {
                                 itype: state.lookup_var(sym).expect("Expected binding to be available, this is a bug."),
                                 inner: ExprInner::Var(sym),
-                             }.into()),
+                             }.into())}
                          ).collect(),
                         Expr {
                             itype: end.itype.clone(),
