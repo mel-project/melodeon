@@ -141,7 +141,7 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                     result: rettype,
                 };
                 state = state.bind_fun(**name, fun_info);
-                fun_defs.push_back(FunDefn {
+                fun_defs.push(FunDefn {
                     name: **name,
                     args: args.iter().map(|s| *s.name).collect(),
                     body,
@@ -218,7 +218,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             for (var, val) in binds.into_iter() {
                 let checked_val = recurse(val)?;
                 //checked_binds.push_back((*var.deref(), recurse(val).map(|t| t.0).into()));
-                checked_binds.push_back((*var.deref(), checked_val.0));
+                checked_binds.push((*var.deref(), checked_val.0));
             }
 
             let type_binds = checked_binds.iter().map(|(v,e)| (*v, e.itype.clone())).collect();

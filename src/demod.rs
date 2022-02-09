@@ -84,12 +84,13 @@ impl Demodularizer {
                         match def.deref() {
                             RawDefn::Require(other) => {
                                 let other_demodularized = self.demod(*other, root)?;
-                                accum.append(mangle(
+                                accum.append(&mut mangle(
                                     other_demodularized.definitions.clone(),
                                     *other,
                                 ));
                             }
-                            _ => accum.push_back(def.clone()),
+                            //_ => accum.push_back(def.clone()),
+                            _ => accum.push(def.clone()),
                         }
                         Ok(accum)
                     },
@@ -98,7 +99,7 @@ impl Demodularizer {
                     || Ok::<_, CtxErr>(List::new()),
                     |a, b| {
                         let mut a = a?;
-                        a.append(b?);
+                        a.append(&mut b?);
                         Ok(a)
                     },
                 )?;
@@ -108,7 +109,7 @@ impl Demodularizer {
                 ModuleId::from_path(Path::new("STDLIB")),
                 root,
             ).unwrap();
-            new_defs.append(stdlib.definitions.clone());
+            new_defs.append(&mut stdlib.definitions.clone());
             Ok(RawProgram {
                 definitions: new_defs,
                 body: parsed.body.clone(),

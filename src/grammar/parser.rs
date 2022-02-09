@@ -88,7 +88,7 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId, root: &Path) -> Ctx<RawD
                         Rule::type_name => &mut genvars,
                         _ => unreachable!(),
                     }
-                    .push_back(Symbol::from(elem.as_str()).with_ctx(elem_ctx));
+                    .push(Symbol::from(elem.as_str()).with_ctx(elem_ctx));
                 }
                 (cgvars, genvars)
             } else {
@@ -174,13 +174,13 @@ fn parse_fun_args(pair: Pair<Rule>, source: ModuleId) -> List<Ctx<RawTypeBind>> 
         let var_type = children.next().unwrap();
         let var_type = parse_type_expr(var_type, source);
         let ctx = var_type.ctx();
-        toret.push_back(
+        toret.push(
             RawTypeBind {
                 name: var_name,
                 bind: var_type,
             }
             .with_ctx(ctx),
-        )
+        );
     }
     toret
 }
@@ -438,7 +438,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .with_ctx(p2ctx(&fun_name, source));
             let mut args = List::new();
             for arg in children.next().unwrap().into_inner() {
-                args.push_back(parse_expr(arg, source));
+                args.push(parse_expr(arg, source));
             }
             RawExpr::ExternApply(fun_name, args).with_ctx(ctx)
         }

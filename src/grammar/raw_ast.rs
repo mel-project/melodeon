@@ -174,7 +174,7 @@ fn visit(
                 log::trace!("{:?} depends on {:?}", def.name(), parent);
                 visit(parent, defs, &mut sorted, &mut visited);
             }
-            sorted.push_back(def.clone());
+            sorted.push(def.clone());
         }
     }
 }

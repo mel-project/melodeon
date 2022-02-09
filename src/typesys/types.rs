@@ -598,7 +598,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 .cvar_locations()
                 .into_iter()
                 .map(|mut loc| {
-                    loc.push_front(None);
+                    loc.insert(0, None);
                     loc
                 })
                 .collect(),
@@ -829,7 +829,7 @@ impl<CVar: Variable> ConstExpr<CVar> {
     pub fn cvars(&self) -> List<CVar> {
         let mut accum = List::new();
         self.fill(|v| {
-            accum.push_back(v.clone());
+            accum.push(v.clone());
             Self::Var(v.clone())
         });
         accum
