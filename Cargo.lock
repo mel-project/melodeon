@@ -423,8 +423,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "imbl"
 version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "543682c9082b25e63d03b5acbd65ad111fd49dd93e70843e5175db4ff81d606b"
+source = "git+https://github.com/jneem/imbl?rev=f43457ba25eb01854ac867972ba6975bc68848f6#f43457ba25eb01854ac867972ba6975bc68848f6"
 dependencies = [
  "bitmaps",
  "rand_core",

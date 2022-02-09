@@ -22,7 +22,8 @@ derive_more = "0.99.16"
 env_logger = "0.9.0"
 ethnum = "1.0.3"
 hex = "0.4.3"
-imbl = {version = "1.0.1", features=["rayon"]}
+#imbl = {version = "1.0.1", features=["rayon"]}
+imbl = { git = "https://github.com/jneem/imbl", rev = "f43457ba25eb01854ac867972ba6975bc68848f6", features=["rayon"]}
 internment = "0.5.4"
 lexpr = "0.2.6"
 log = "0.4.14"
