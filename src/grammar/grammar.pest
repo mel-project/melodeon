@@ -126,7 +126,7 @@ if_expr = {
 }
 
 loop_expr = {
-    "loop" ~ const_expr ~ "do" ~ (set_bang ~ ";")* ~ (set_bang)? ~ "done" ~ "with" ~ expr
+    "loop" ~ const_expr ~ "do" ~ (set_bang ~ ";")* ~ (set_bang)? ~ "with" ~ expr
 }
 
 set_bang = {
