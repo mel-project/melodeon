@@ -463,6 +463,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     ))
                 }
             }
+            Type::DynVectorof(t) => {
+                Some(Cow::Owned(t.as_ref().clone()))
+            }
             Type::Vectorof(t, n) => {
                 if let Some(idx) = idx {
                     if idx.add1().leq(n) {
