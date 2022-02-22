@@ -78,7 +78,7 @@ def n2b(b: Nat) = unsafe extern call "u256->bytes" (b) :! %[32]
 
 # signatures
 def ed25519_verify<$n>(msg: %[$n], public_key: %[32], signature: %[32]) =
-	unsafe extern call "sigeok" (msg, public_key, signature) :! Bool
+    unsafe extern call "sigeok" ($n, msg, public_key, signature) :! Bool
 
 def print<T>(x: T): T =
     unsafe extern call "print" (x) :! T
