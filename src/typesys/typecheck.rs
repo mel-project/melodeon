@@ -360,7 +360,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     ))
                 }
                 crate::grammar::BinOp::Eq => {
-                    check_nats()?;
+                    //check_nats()?;
                     Ok((
                         Expr {
                             itype: Type::NatRange(0u32.into(), 1u32.into()),

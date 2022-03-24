@@ -251,7 +251,29 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
                     .sexpr(),
                 )
             })
-            .fold(Value::Number(1.into()), |a, b| {
+            .fold(Value::Number(1_u64.into()), |a, b| {
+                [Value::symbol("and"), a, b].sexpr()
+            }),
+        Type::Bytes(b) =>
+            (0..b.eval().as_u64().saturating_sub(1))
+            .map(|i| {
+                generate_eq_check(
+                    &Type::NatRange(0_u32.into(), 1_u32.into()),
+                    [
+                        Value::symbol("b-get"),
+                        left_expr.clone(),
+                        Value::Number((i as u64).into()),
+                    ]
+                    .sexpr(),
+                    [
+                        Value::symbol("b-get"),
+                        right_expr.clone(),
+                        Value::Number((i as u64).into()),
+                    ]
+                    .sexpr(),
+                )
+            })
+            .fold(Value::Number(1_u64.into()), |a, b| {
                 [Value::symbol("and"), a, b].sexpr()
             }),
         Type::Vectorof(t, n) => generate_eq_check(
@@ -295,7 +317,6 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
             .sexpr()
         }
         Type::DynVectorof(_) => todo!(),
-        Type::Bytes(_) => todo!(),
         Type::DynBytes => todo!(),
     }
 }
