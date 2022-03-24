@@ -9,7 +9,7 @@ struct CoinData {
 	covhash: Hash,
 	value: Nat,
 	denom: %[],
-	additional_nmdata: %[],
+	additional_data: %[],
 }
 
 struct Transaction {
