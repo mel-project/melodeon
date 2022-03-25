@@ -200,29 +200,16 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
     let recurse = |c| typecheck_expr(state.clone(), c);
     let ctx = raw.ctx();
     match raw.deref().clone() {
-        //RawExpr::Let(var, value, body) => {
         RawExpr::Let(binds, body) => {
-            //let value = recurse(value)?;
-            //let body = typecheck_expr(state.clone().bind_var(*var, value.0.itype.clone()), body)?;
-            //let checked_binds: Result<Vec<(Ctx<Symbol>, (Expr<_, _>, TypeFacts<_, _>))>, Ctx<anyhow::Error>> =
-
-            //let checked_binds: Vec<(Ctx<Symbol>, (Expr<Tv, Cv>, TypeFacts<Tv, Cv>))> =
-            /*
-            let checked_binds: List<(Symbol, Expr<Tv, Cv>)> =
-                binds.into_iter()
-                .map(|(v,e)| (*v.deref(), recurse(e).map(|t| t.0).into()))
-                .collect::<CtxResult<List<(Symbol, Expr<Tv, Cv>)>>>()?;
-            */
-
             let mut checked_binds: List<(Symbol, Expr<Tv, Cv>)> = List::new();
+            let mut final_state = state.clone();
             for (var, val) in binds.into_iter() {
-                let checked_val = recurse(val)?;
-                //checked_binds.push_back((*var.deref(), recurse(val).map(|t| t.0).into()));
+                let checked_val = typecheck_expr(final_state.clone(), val)?;
+                final_state = final_state.bind_var(*var, checked_val.0.itype.clone());
                 checked_binds.push((*var.deref(), checked_val.0));
             }
 
-            let type_binds = checked_binds.iter().map(|(v,e)| (*v, e.itype.clone())).collect();
-            let body = typecheck_expr(state.clone().bind_vars(type_binds), body)?;
+            let body = typecheck_expr(final_state, body)?;
             let type_facts = checked_binds.iter()
                 .map(|t| t.0)
                 .fold(body.1, |acc, var| acc.clear_mapping(var));
@@ -230,14 +217,11 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             Ok((
                 Expr {
                     itype: body.0.itype.clone(),
-                    //inner: ExprInner::Let(*var, value.0u32.into(), body.0u32.into()),
                     inner: ExprInner::Let(
                         checked_binds.into_iter().map(|(v,e)| (v, e.into())).collect(),
                         body.0.into()),
                 },
                 type_facts,
-                //checked_binds.iter().map(|t| t.0).fold(body.1, |acc, var|
-                //    acc.clear_mapping(*var)),
             ))
         }
         RawExpr::If(c, x, y) => {
