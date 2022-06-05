@@ -935,7 +935,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                             .collect(),
                         Expr {
                             itype: end.itype.clone(),
-                            inner: ExprInner::Loop(iterations, body, end.into()).into(),
+                            inner: ExprInner::Loop(iterations, body, end.into()),
                         }
                         .into(),
                     ),
@@ -1178,8 +1178,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         Var(temp_counter).wrap(Type::all_nat()).into(),
                         LitNum(1u32.into()).wrap(Type::all_nat()).into(),
                     )
-                    .wrap(Type::all_nat())
-                    .into(),
+                    .wrap(Type::all_nat()),
                 ),
             ]
             .into_iter()
@@ -1205,8 +1204,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     .wrap(result_type.clone())
                     .into(),
                 )
-                .wrap(result_type.clone())
-                .into(),
+                .wrap(result_type),
                 TypeFacts::empty(),
             ))
         }
@@ -1496,7 +1494,7 @@ fn monomorphize_inner(
                         },
                     );
                 }
-                ExprInner::Apply(f, args.iter().map(|a| recurse(a)).collect())
+                ExprInner::Apply(f, args.iter().map(recurse).collect())
             }
             ExprInner::ApplyGeneric(f, tvars, cvars, args) => {
                 // generate a monomorphized version
@@ -1546,10 +1544,10 @@ fn monomorphize_inner(
                         },
                     );
                 }
-                ExprInner::Apply(mangled_name, args.iter().map(|a| recurse(a)).collect())
+                ExprInner::Apply(mangled_name, args.iter().map(recurse).collect())
             }
             ExprInner::LitNum(v) => ExprInner::LitNum(v),
-            ExprInner::LitVec(lv) => ExprInner::LitVec(lv.iter().map(|a| recurse(a)).collect()),
+            ExprInner::LitVec(lv) => ExprInner::LitVec(lv.iter().map(recurse).collect()),
             ExprInner::Var(v) => ExprInner::Var(v),
             ExprInner::IsType(a, b) => ExprInner::IsType(
                 a,

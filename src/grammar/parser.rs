@@ -316,7 +316,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             RawExpr::If(condition, x, RawExpr::Fail.into()).with_ctx(ctx)
         }
         Rule::let_expr => {
-            let mut children: Vec<_> = pair.into_inner().collect();
+            let children: Vec<_> = pair.into_inner().collect();
 
             let bindings = children
                 .chunks_exact(2)
@@ -419,7 +419,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                                     Rule::rshift => BinOp::Rshift,
                                     _ => unreachable!(),
                                 }
-                                .with_ctx(p2ctx(&op, source)),
+                                .with_ctx(p2ctx(op, source)),
                                 toret.clone(),
                                 parse_expr(child.clone(), source),
                             )

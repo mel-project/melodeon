@@ -55,7 +55,7 @@ impl<T> Clone for Ctx<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            context: self.context.clone(),
+            context: self.context,
         }
     }
 }

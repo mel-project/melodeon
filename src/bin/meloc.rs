@@ -3,7 +3,7 @@
 use std::{path::Path, time::Instant};
 
 use argh::FromArgs;
-use colored::Colorize;
+
 use log::LevelFilter;
 use melodeon::{
     codegen::codegen_program,

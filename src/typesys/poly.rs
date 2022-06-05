@@ -53,8 +53,7 @@ impl<CVar: Variable> Polynomial<CVar> {
             log::trace!("pp = {:?}, qq = {:?}", pp, qq);
             pp.iter()
                 .copied()
-                .map(|p| qq.iter().copied().map(move |q| (p, q)))
-                .flatten()
+                .flat_map(|p| qq.iter().copied().map(move |q| (p, q)))
                 .chain(std::iter::once((0u8.into(), 1u8.into())))
                 .chain(std::iter::once((rhs, 1u8.into())))
                 .filter_map(|(p, q)| {

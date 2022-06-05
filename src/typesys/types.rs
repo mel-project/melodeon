@@ -463,9 +463,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     ))
                 }
             }
-            Type::DynVectorof(t) => {
-                Some(Cow::Owned(t.as_ref().clone()))
-            }
+            Type::DynVectorof(t) => Some(Cow::Owned(t.as_ref().clone())),
             Type::Vectorof(t, n) => {
                 if let Some(idx) = idx {
                     if idx.add1().leq(n) {
@@ -795,9 +793,9 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     return None;
                 }
                 Some(Cow::Owned(
-                    x.into_owned()
-                        .into_iter()
-                        .zip(y.into_owned().into_iter())
+                    x.iter()
+                        .cloned()
+                        .zip(y.iter().cloned())
                         .map(|(x, y)| Type::Union(x.into(), y.into()))
                         .collect(),
                 ))

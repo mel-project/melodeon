@@ -161,8 +161,8 @@ pub fn sort_defs(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
 fn visit(
     def: Symbol,
     defs: &List<Ctx<RawDefn>>,
-    mut sorted: &mut List<Ctx<RawDefn>>,
-    mut visited: &mut Set<Symbol>,
+    sorted: &mut List<Ctx<RawDefn>>,
+    visited: &mut Set<Symbol>,
 ) {
     if !visited.contains(&def) {
         visited.insert(def);
@@ -172,7 +172,7 @@ fn visit(
         if let Some(def) = def {
             for parent in def.parents() {
                 log::trace!("{:?} depends on {:?}", def.name(), parent);
-                visit(parent, defs, &mut sorted, &mut visited);
+                visit(parent, defs, sorted, visited);
             }
             sorted.push(def.clone());
         }
@@ -312,7 +312,7 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
                 |acc,var| acc.without(var))
         }
         RawExpr::Apply(fn_name, args) => args
-            .into_iter()
+            .iter()
             .fold(rec(fn_name), |acc, arg| acc.union(rec(arg))),
         RawExpr::LitStruct(s_name, fields) => fields
             .values()
@@ -350,7 +350,7 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::Unsafe(s) => rec(s),
         RawExpr::Extern(_) => Set::new(),
         RawExpr::ExternApply(_, args) => args
-            .into_iter()
+            .iter()
             .fold(Set::new(), |acc, arg| acc.union(rec(arg))),
     }
 }

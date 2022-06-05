@@ -155,7 +155,7 @@ fn codegen_expr(expr: &Expr) -> Value {
         ]
         .sexpr(),
         ExprInner::Apply(f, vec) => std::iter::once(Value::symbol(f.to_string()))
-            .chain(vec.iter().map(|i| codegen_expr(i)))
+            .chain(vec.iter().map(codegen_expr))
             .sexpr(),
         ExprInner::ApplyGeneric(_, _, _, _) => todo!(),
         ExprInner::LitNum(num) => {
@@ -163,10 +163,10 @@ fn codegen_expr(expr: &Expr) -> Value {
             u256_to_sexpr(*num)
         }
         ExprInner::LitVec(vec) => std::iter::once(Value::symbol("vector"))
-            .chain(vec.iter().map(|i| codegen_expr(i)))
+            .chain(vec.iter().map(codegen_expr))
             .sexpr(),
         ExprInner::LitBVec(vec) => std::iter::once(Value::symbol("bytes"))
-            .chain(vec.iter().map(|i| codegen_expr(i)))
+            .chain(vec.iter().map(codegen_expr))
             .sexpr(),
         ExprInner::LitConst(_) => unreachable!(),
         ExprInner::Var(v) => Value::symbol(v.to_string()),
@@ -421,7 +421,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
             let length_correct_expr = [
                 Value::symbol("="),
                 Value::Number((n.eval().as_u64()).into()),
-                [Value::symbol("b-len"), inner.clone()].sexpr(),
+                [Value::symbol("b-len"), inner].sexpr(),
             ]
             .sexpr();
             [Value::symbol("and"), is_bytes_expr, length_correct_expr].sexpr()
@@ -429,7 +429,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
         Type::DynBytes => [
             Value::symbol("="),
             Value::Number(1.into()),
-            [Value::symbol("typeof"), inner.clone()].sexpr(),
+            [Value::symbol("typeof"), inner].sexpr(),
         ]
         .sexpr(),
     }
