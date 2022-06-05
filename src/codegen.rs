@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use crate::{
     containers::Symbol,
-    typed_ast::{UniOp, BinOp, Expr, ExprInner, FunDefn, Program},
+    typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program, UniOp},
     typesys::Type,
 };
 use ethnum::U256;
@@ -96,7 +96,7 @@ fn codegen_expr(expr: &Expr) -> Value {
             };
             let x = codegen_expr(x);
             [op, x].sexpr()
-        },
+        }
         ExprInner::BinOp(op, x, y) => {
             let op = match op {
                 BinOp::Add => Value::symbol("+"),
@@ -134,18 +134,22 @@ fn codegen_expr(expr: &Expr) -> Value {
             Value::Number(k.eval().as_u8().into()),
             codegen_expr(base),
             u256_to_sexpr(exp.eval()),
-        ].sexpr(),
+        ]
+        .sexpr(),
         ExprInner::If(a, b, c) => [
             Value::symbol("if"),
             codegen_expr(a),
             codegen_expr(b),
             codegen_expr(c),
-        ].sexpr(),
+        ]
+        .sexpr(),
         ExprInner::Let(binds, i) => [
             Value::symbol("let"),
-            binds.iter()
-                .fold(vec![], |acc, (var,val)|
-                    [acc, vec![Value::symbol(var.to_string()), codegen_expr(val)]].concat())
+            binds
+                .iter()
+                .fold(vec![], |acc, (var, val)| {
+                    [acc, vec![Value::symbol(var.to_string()), codegen_expr(val)]].concat()
+                })
                 .sexpr(),
             codegen_expr(i),
         ]
@@ -254,8 +258,7 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
             .fold(Value::Number(1_u64.into()), |a, b| {
                 [Value::symbol("and"), a, b].sexpr()
             }),
-        Type::Bytes(b) =>
-            (0..b.eval().as_u64().saturating_sub(1))
+        Type::Bytes(b) => (0..b.eval().as_u64().saturating_sub(1))
             .map(|i| {
                 generate_eq_check(
                     &Type::NatRange(0_u32.into(), 1_u32.into()),
@@ -485,7 +488,7 @@ mod tests {
                         let x = 0 :: Nat in
                         loop 100 do
                             set! x = x + 1
-                        done with x
+                        return x
                         ",
                         module,
                         &std::path::PathBuf::from(""),
