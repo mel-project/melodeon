@@ -392,7 +392,18 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
             .sexpr();
             inners
                 .iter()
-                .map(|i| generate_type_check(i, inner.clone()))
+                .enumerate()
+                .map(|(idx, t)| {
+                    generate_type_check(
+                        t,
+                        [
+                            Value::symbol("v-get"),
+                            inner.clone(),
+                            Value::Number((idx as u64).into()),
+                        ]
+                        .sexpr(),
+                    )
+                })
                 .fold(
                     [Value::symbol("and"), is_vector_expr, length_correct_expr].sexpr(),
                     |a, b| [Value::symbol("and"), a, b].sexpr(),
@@ -487,7 +498,7 @@ mod tests {
                         def dol(x: Nat) = [x]
                         def foo(x: Nat) =
                         let y = dol(x) in
-                        if y is [{1..5}] then
+                        if y is [Nat] then
                             y[0]
                         else
                             y

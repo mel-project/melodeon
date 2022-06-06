@@ -37,9 +37,9 @@ impl Demodularizer {
         let fallback =
             move |mid: ModuleId| {
                 let mid = mid.to_string();
-                if mid.starts_with('$') {
+                if let Some(stripped) = mid.strip_prefix('$') {
                     let mut root = global_root.clone();
-                    root.push(&mid[1..]);
+                    root.push(&stripped);
                     log::debug!("reading library {:?}", root);
                     Ok(std::fs::read_to_string(&Path::new(&format!(
                         "{}.melo",
@@ -108,7 +108,8 @@ impl Demodularizer {
                 include_str!("stdlib.melo"),
                 ModuleId::from_path(Path::new("STDLIB")),
                 root,
-            ).unwrap();
+            )
+            .unwrap();
             new_defs.append(&mut stdlib.definitions.clone());
             Ok(RawProgram {
                 definitions: new_defs,
@@ -207,7 +208,7 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
             }
 
             RawExpr::Let(
-                binds.into_iter().map(|(s,v)| (s, recurse(v))).collect(),
+                binds.into_iter().map(|(s, v)| (s, recurse(v))).collect(),
                 mangle_expr(body, source, &inner_no_mangle),
             )
         }
