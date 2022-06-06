@@ -364,7 +364,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
                 is_number_expr
             } else {
                 [
-                    Value::symbol("and"),
+                    Value::symbol("if"),
                     is_number_expr,
                     [
                         Value::symbol("and"),
@@ -372,6 +372,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
                         [Value::symbol("<="), inner, u256_to_sexpr(b.eval())].sexpr(),
                     ]
                     .sexpr(),
+                    Value::Number(0i32.into()),
                 ]
                 .sexpr()
             }
@@ -471,6 +472,37 @@ mod tests {
             .format_timestamp(None)
             .filter_level(LevelFilter::Trace)
             .try_init();
+    }
+
+    #[test]
+    fn tricky_codegen() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        eprintln!(
+            "{}",
+            codegen_program(
+                typecheck_program(
+                    parse_program(
+                        r"
+                        def dol(x: Nat) = [x]
+                        def foo(x: Nat) =
+                        let y = dol(x) in
+                        if y is [{1..5}] then
+                            y[0]
+                        else
+                            y
+                    
+                    ---
+                    foo(2)                    
+                        ",
+                        module,
+                        &std::path::PathBuf::from(""),
+                    )
+                    .unwrap()
+                )
+                .unwrap()
+            )
+        );
     }
     #[test]
     fn simple_codegen() {

@@ -1618,6 +1618,33 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_tricky() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        eprintln!(
+            "{:?}",
+            typecheck_program(
+                parse_program(
+                    r"
+def foo<$n>() = succ(0)
+def succ<$n>(x: {$n..$n}) = $n + 1
+def peel<$n>(x : {$n+1..$n+1}) = $n
+--- 
+let x = 0 :: Nat in
+loop 100 do
+set! x = x + 1
+return x
+                ",
+                    module,
+                    &std::path::PathBuf::from(""),
+                )
+                .unwrap()
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
     fn typecheck_whole() {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
