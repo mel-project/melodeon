@@ -66,7 +66,7 @@ def enumerate<$n, T>(x: [T; $n]) = zip(range($n), x)
 def unsafe_vref<T>(x: [T;], i: Nat) = unsafe (x :! [T; 1])[i :! {0}]
 
 def vref<T>(x: [T;], n: Nat): T | False =
-    if n < vlen(x):
+    if n < vlen(x) then
         unsafe_vref(x, n)
     else
         0
