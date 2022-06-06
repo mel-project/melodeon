@@ -405,8 +405,14 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
                     )
                 })
                 .fold(
-                    [Value::symbol("and"), is_vector_expr, length_correct_expr].sexpr(),
-                    |a, b| [Value::symbol("and"), a, b].sexpr(),
+                    [
+                        Value::symbol("if"),
+                        is_vector_expr,
+                        length_correct_expr,
+                        Value::Number(0.into()),
+                    ]
+                    .sexpr(),
+                    |a, b| [Value::symbol("if"), a, b, Value::Number(0.into())].sexpr(),
                 )
         }
         Type::Vectorof(v, n) => generate_type_check(
@@ -436,7 +442,13 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
                 [Value::symbol("b-len"), inner].sexpr(),
             ]
             .sexpr();
-            [Value::symbol("and"), is_bytes_expr, length_correct_expr].sexpr()
+            [
+                Value::symbol("if"),
+                is_bytes_expr,
+                length_correct_expr,
+                Value::Number(0.into()),
+            ]
+            .sexpr()
         }
         Type::DynBytes => [
             Value::symbol("="),
@@ -495,16 +507,17 @@ mod tests {
                 typecheck_program(
                     parse_program(
                         r"
-                        def dol(x: Nat) = [x]
+                        def dol(x: Nat) = if x % 2 == 0 then [x] else x
                         def foo(x: Nat) =
-                        let y = dol(x) in
-                        if y is [Nat] then
-                            y[0]
-                        else
-                            y
-                    
-                    ---
-                    foo(2)                    
+                            let y = dol(x) in
+                            if y is [Nat] then
+                                y[0]
+                            else
+                                [y, 2]
+                        
+                        ---
+                        
+                        foo(3)
                         ",
                         module,
                         &std::path::PathBuf::from(""),
