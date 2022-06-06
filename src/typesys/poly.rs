@@ -169,13 +169,10 @@ impl<CVar: Variable> PartialOrd<Self> for Polynomial<CVar> {
     /// Generally, that will be handled by attempting to find a coefficient with an equal or higher degree and comparing with that
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self <= other && other <= self {
-            eprintln!("{:?} == {:?}", self, other);
             Some(Ordering::Equal)
         } else if self < other {
-            eprintln!("{:?} < {:?}", self, other);
             Some(Ordering::Less)
         } else if other < self {
-            eprintln!("{:?} > {:?}", self, other);
             Some(Ordering::Greater)
         } else {
             None

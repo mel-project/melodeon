@@ -843,7 +843,7 @@ impl<CVar: Variable> ConstExpr<CVar> {
 
     /// Partial order relation
     pub fn lt(&self, other: &Self) -> bool {
-        dbg!(Polynomial::from(dbg!(self)) < Polynomial::from(dbg!(other)))
+        Polynomial::from(other) < Polynomial::from(other)
     }
 
     /// Fills in the free variables fallibly, given a mapping.
