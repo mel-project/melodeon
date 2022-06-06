@@ -54,7 +54,7 @@ def range<$n>(x: {$n..$n}) =
     loop $n do
         set! accum = (accum ++ [ctr]) :! [Nat; $n]; 
         set! ctr = ctr + 1
-    with accum
+    return accum
 
 def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
     for i in range($n)
