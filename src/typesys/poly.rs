@@ -169,22 +169,36 @@ impl<CVar: Variable> PartialOrd<Self> for Polynomial<CVar> {
     /// Generally, that will be handled by attempting to find a coefficient with an equal or higher degree and comparing with that
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self <= other && other <= self {
+            eprintln!("{:?} == {:?}", self, other);
             Some(Ordering::Equal)
-        } else if self <= other {
+        } else if self < other {
+            eprintln!("{:?} < {:?}", self, other);
             Some(Ordering::Less)
-        } else if other <= self {
+        } else if other < self {
+            eprintln!("{:?} > {:?}", self, other);
             Some(Ordering::Greater)
         } else {
             None
         }
     }
 
+    fn lt(&self, other: &Self) -> bool {
+        // add 1 to self
+        let this = self.clone() + Polynomial::from(&ConstExpr::Lit(1u32.into()));
+        &this <= other
+    }
+
     fn le(&self, other: &Self) -> bool {
-        log::trace!("comparing {:?} <=? {:?}", self, other);
-        self.terms.iter().all(|(k, v)| {
+        let r1 = self.terms.iter().all(|(k, v)| {
             let ov = other.terms.get(k).copied().unwrap_or_default();
             v <= &ov
-        })
+        });
+        let r2 = other.terms.iter().all(|(k, ov)| {
+            let v = self.terms.get(k).copied().unwrap_or_default();
+            &v <= ov
+        });
+        log::trace!("comparing {:?} <=? {:?} ({})", self, other, r1 && r2);
+        r1 && r2
     }
 }
 

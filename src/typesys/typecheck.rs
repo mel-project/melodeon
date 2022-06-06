@@ -1307,7 +1307,7 @@ fn type_bytes_ref<Tv: Variable, Cv: Variable>(
         "bytes index of type {:?} has no upper bound",
         itype
     ))?;
-    if !i_upper_bound.le(&v_length) {
+    if !i_upper_bound.lt(&v_length) {
         Err(anyhow::anyhow!(
             "cannot index into vector {:?} of length {:?} with something of type {:?}",
             vtype,
@@ -1345,7 +1345,12 @@ fn type_vector_ref<Tv: Variable, Cv: Variable>(
         "vector index of type {:?} has no upper bound",
         itype
     ))?;
-    if !i_upper_bound.le(&v_length) {
+    log::debug!(
+        "comparing upper bound {:?} to v_length {:?}",
+        i_upper_bound,
+        v_length
+    );
+    if !i_upper_bound.lt(&v_length) {
         Err(anyhow::anyhow!(
             "cannot index into vector {:?} of length {:?} with something of type {:?}",
             vtype,
@@ -1642,6 +1647,25 @@ return x
             )
             .unwrap()
         );
+    }
+
+    #[test]
+    fn typecheck_issue4() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        assert!(typecheck_program(
+            parse_program(
+                r"
+        def head<$n, T>(t: [T; $n]) = t[0]
+    ",
+                module,
+                &std::path::PathBuf::from(""),
+            )
+            .unwrap(),
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("index"));
     }
 
     #[test]
