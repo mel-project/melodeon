@@ -498,6 +498,28 @@ mod tests {
     }
 
     #[test]
+    fn vector_slice() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        eprintln!(
+            "{}",
+            codegen_program(
+                typecheck_program(
+                    parse_program(
+                        r"
+                        [1, 2, 3][0..3]
+                        ",
+                        module,
+                        &std::path::PathBuf::from(""),
+                    )
+                    .unwrap()
+                )
+                .unwrap()
+            )
+        );
+    }
+
+    #[test]
     fn tricky_codegen() {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
