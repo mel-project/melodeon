@@ -35,13 +35,12 @@ impl<Tv: Variable, Cv: Variable> TypeFacts<Tv, Cv> {
     pub fn union(mut self, other: Self) -> Self {
         //  A best-effort attempt at intersecting the types is done
         self.mapping = self.mapping.union_with(other.mapping, |a, b| {
-            
             if a.subtype_of(&b) {
                 a
             } else if b.subtype_of(&a) {
                 b
             } else {
-                Type::None
+                Type::Nothing
             }
         });
         self

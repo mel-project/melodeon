@@ -9,7 +9,7 @@ pub fn partially_erase_cg<T: Variable, C: Variable>(
 ) -> Type<T, C> {
     let recurse = |v| partially_erase_cg(v, erase);
     match t {
-        Type::None => Type::None,
+        Type::Nothing => Type::Nothing,
         Type::Any => Type::Any,
         Type::Var(v) => Type::Var(v.clone()),
         Type::NatRange(n, m) => Type::NatRange(

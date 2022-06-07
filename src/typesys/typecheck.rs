@@ -946,7 +946,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         RawExpr::Fail => Ok((
             Expr {
                 inner: ExprInner::Fail,
-                itype: Type::None,
+                itype: Type::Nothing,
             },
             TypeFacts::empty(),
         )),
@@ -1376,6 +1376,8 @@ fn typecheck_type_expr<Tv: Variable, Cv: Variable>(
                 Ok(Type::all_nat())
             } else if s == Symbol::from("Any") {
                 Ok(Type::Any)
+            } else if s == Symbol::from("Nothing") {
+                Ok(Type::Nothing)
             } else {
                 state
                     .lookup_type_alias(s)

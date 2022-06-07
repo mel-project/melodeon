@@ -34,7 +34,7 @@ impl Variable for Symbol {
 /// In general, typechecking code should not directly match against [`Type`]. Instead, use the subtyping and unification methods as needed.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Type<TVar: Variable = Void, CVar: Variable = Void> {
-    None,
+    Nothing,
     Any,
     Var(TVar),
     NatRange(ConstExpr<CVar>, ConstExpr<CVar>),
@@ -53,7 +53,7 @@ impl<TVar: Variable, CVar: Variable> Debug for Type<TVar, CVar> {
             return std::fmt::Display::fmt("Nat", f);
         }
         match self {
-            Type::None => std::fmt::Display::fmt("None", f),
+            Type::Nothing => std::fmt::Display::fmt("Nothing", f),
             Type::Any => std::fmt::Display::fmt("Any", f),
             Type::Var(t) => t.fmt(f),
             Type::NatRange(a, b) => {
@@ -115,7 +115,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
     pub fn subtype_of(&self, other: &Self) -> bool {
         log::trace!("checking {:?} <:? {:?}", self, other);
         match (self, other) {
-            (Type::None, _) => true,
+            (Type::Nothing, _) => true,
             (_, Type::Any) => true,
             (Type::Any, _) => false,
             // structs desugar to vectors
@@ -236,7 +236,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         log::trace!("subtracting {:?} - {:?}", self, other);
         // if we're a subtype of other, we're done
         if self.subtype_of(other) {
-            return Cow::Owned(Type::None);
+            return Cow::Owned(Type::Nothing);
         }
         if let Type::Union(t, u) = other {
             return Cow::Owned(self.subtract(t).subtract(u).into_owned());
@@ -292,7 +292,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     _ => Cow::Borrowed(self),
                 }
             }
-            Type::None => Cow::Borrowed(self),
+            Type::Nothing => Cow::Borrowed(self),
             Type::Any => Cow::Borrowed(self),
             Type::Var(_) => Cow::Borrowed(self),
             Type::NatRange(ax, ay) => {
@@ -349,7 +349,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
             .map(|(var, locations)| {
                 locations
                     .into_iter()
-                    .fold(Some(Type::None), |accum, elem| {
+                    .fold(Some(Type::Nothing), |accum, elem| {
                         let accum = accum?;
                         let mut ptr = other.clone();
                         for elem in elem {
@@ -459,7 +459,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                     Some(Cow::Borrowed(elems.get(idx)?))
                 } else {
                     Some(Cow::Owned(
-                        elems.iter().fold(Type::None, |a, b| a.smart_union(b)),
+                        elems.iter().fold(Type::Nothing, |a, b| a.smart_union(b)),
                     ))
                 }
             }
@@ -497,12 +497,12 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
                 v1.iter().cloned().chain(v2.iter().cloned()).collect(),
             )),
             (Type::Vector(v1), Type::Vectorof(t, n)) => Some(Type::Vectorof(
-                t.smart_union(&v1.iter().fold(Type::None, |a, b| a.smart_union(b)))
+                t.smart_union(&v1.iter().fold(Type::Nothing, |a, b| a.smart_union(b)))
                     .into(),
                 ConstExpr::Add(n.clone().into(), Arc::new(v1.len().into())),
             )),
             (Type::Vectorof(t, n), Type::Vector(v)) => Some(Type::Vectorof(
-                t.smart_union(&v.iter().fold(Type::None, |a, b| a.smart_union(b)))
+                t.smart_union(&v.iter().fold(Type::Nothing, |a, b| a.smart_union(b)))
                     .into(),
                 ConstExpr::Add(n.clone().into(), Arc::new(v.len().into())),
             )),
@@ -563,7 +563,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
     /// Returns the set of all locations where constant-generic parameters appear.
     fn cvar_locations(&self) -> Set<List<Option<usize>>> {
         match self {
-            Type::None => Set::new(),
+            Type::Nothing => Set::new(),
             Type::Any => Set::new(),
             Type::Var(_) => Set::new(),
             Type::NatRange(_, _) => [List::new()].into_iter().collect(),
@@ -684,7 +684,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         mapping: &impl Fn(&TVar) -> Option<Type<NewTVar, CVar>>,
     ) -> Option<Type<NewTVar, CVar>> {
         match self {
-            Type::None => Some(Type::None),
+            Type::Nothing => Some(Type::Nothing),
             Type::Any => Some(Type::Any),
             Type::Var(tvar) => mapping(tvar),
             Type::NatRange(a, b) => Some(Type::NatRange(a.clone(), b.clone())),
@@ -738,7 +738,7 @@ impl<TVar: Variable, CVar: Variable> Type<TVar, CVar> {
         mapping: &mut impl FnMut(&CVar) -> Option<ConstExpr<NewCVar>>,
     ) -> Option<Type<TVar, NewCVar>> {
         match self {
-            Type::None => Some(Type::None),
+            Type::Nothing => Some(Type::Nothing),
             Type::Any => Some(Type::Any),
             Type::Var(tvar) => Some(Type::Var(tvar.clone())),
             Type::NatRange(a, b) => Some(Type::NatRange(
@@ -1036,7 +1036,7 @@ mod tests {
         let r1: Type = Type::NatRange(0.into(), 500.into());
         assert!(r1
             .subtract(&Type::NatRange(0.into(), 500.into()))
-            .equiv_to(&Type::None));
+            .equiv_to(&Type::Nothing));
         assert!(r1
             .subtract(&Type::NatRange(0.into(), 400.into()))
             .equiv_to(&Type::NatRange(401.into(), 500.into())));

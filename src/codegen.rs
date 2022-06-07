@@ -231,7 +231,7 @@ fn codegen_expr(expr: &Expr) -> Value {
 
 fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
     match t {
-        Type::None => Value::Number(1.into()),
+        Type::Nothing => Value::Number(1.into()),
         Type::Any => Value::Number(0.into()),
         Type::Var(_) => unreachable!(),
         Type::NatRange(_, _) => [Value::symbol("="), left_expr, right_expr].sexpr(),
@@ -350,7 +350,7 @@ fn u256_to_sexpr(num: U256) -> Value {
 
 fn generate_type_check(t: &Type, inner: Value) -> Value {
     match t {
-        Type::None => Value::Number(0.into()),
+        Type::Nothing => Value::Number(0.into()),
         Type::Any => Value::Number(1.into()),
         Type::Var(_) => unreachable!(),
         Type::NatRange(a, b) => {
