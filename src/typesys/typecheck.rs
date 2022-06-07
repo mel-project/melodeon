@@ -2,6 +2,7 @@ use std::{fmt::Debug, ops::Deref, sync::atomic::AtomicUsize};
 
 use anyhow::Context;
 use dashmap::{DashMap, DashSet};
+use ethnum::U256;
 use rustc_hash::FxHashSet;
 use tap::Tap;
 
@@ -266,8 +267,19 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 assert_subtype(ctx, &b_expr.itype, &Type::all_nat())?;
                 let template: Type<Void, i32> =
                     Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
-                let a_range = template.unify_cvars(&a_expr.itype).unwrap();
-                let b_range = template.unify_cvars(&b_expr.itype).unwrap();
+                let mut a_range = template.unify_cvars(&a_expr.itype).unwrap();
+                let mut b_range = template.unify_cvars(&b_expr.itype).unwrap();
+
+                // TODO figure out why this happens at all
+                if !a_range.contains_key(&0) || !a_range.contains_key(&1) {
+                    a_range.insert(0, ConstExpr::Lit(U256::ZERO));
+                    a_range.insert(1, ConstExpr::Lit(U256::MAX));
+                }
+                if !b_range.contains_key(&0) || !b_range.contains_key(&1) {
+                    b_range.insert(0, ConstExpr::Lit(U256::ZERO));
+                    b_range.insert(1, ConstExpr::Lit(U256::MAX));
+                }
+
                 Ok::<_, CtxErr>((a_range, b_range))
             };
             match op {
@@ -312,6 +324,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 }
                 crate::grammar::BinOp::Mul => {
                     let (a_range, b_range) = check_nats()?;
+                    dbg!(&a, &a_range, &b, &b_range);
                     // add the two ranges
                     let lower_bound =
                         ConstExpr::Mul(a_range[&0].clone().into(), b_range[&0].clone().into())
@@ -953,6 +966,11 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         RawExpr::For(sym, val, body) => {
             let val = recurse(val)?.0;
             let (val_inner_length, val_inner_type) = vector_info(&val).err_ctx(ctx)?;
+            log::debug!(
+                "recursing inside for expression while binding {:?}={:?}",
+                sym,
+                val_inner_type
+            );
             let body = typecheck_expr(state.bind_var(*sym, val_inner_type.clone()), body)?.0;
             let temp_counter = Symbol::generate("@for-counter");
             let temp_result = Symbol::generate("@for-result");
