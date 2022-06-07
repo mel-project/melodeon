@@ -1686,7 +1686,8 @@ def peel<$n>(x : {$n+1..$n+1}) = $n
 let x = 0 :: Nat in
 loop 100 do
 set! x = x + 1
-return x
+return 
+for x in [1, 2, 3] collect x*2
                 ",
                     module,
                     &std::path::PathBuf::from(""),
