@@ -324,7 +324,6 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 }
                 crate::grammar::BinOp::Mul => {
                     let (a_range, b_range) = check_nats()?;
-                    dbg!(&a, &a_range, &b, &b_range);
                     // add the two ranges
                     let lower_bound =
                         ConstExpr::Mul(a_range[&0].clone().into(), b_range[&0].clone().into())
