@@ -708,10 +708,10 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             }
         }
         RawExpr::IsType(x, y) => {
-            let orig_type = state
-                .lookup_var(x)
-                .context("undefined variable")
-                .err_ctx(ctx)?;
+            // let orig_type = state
+            //     .lookup_var(x)
+            //     .context("undefined variable")
+            //     .err_ctx(ctx)?;
             let t = typecheck_type_expr(&state, y)?;
             // if !t.subtype_of(&orig_type) {
             //     return Err(anyhow::anyhow!(
