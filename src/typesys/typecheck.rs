@@ -713,14 +713,14 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .context("undefined variable")
                 .err_ctx(ctx)?;
             let t = typecheck_type_expr(&state, y)?;
-            if !t.subtype_of(&orig_type) {
-                return Err(anyhow::anyhow!(
-                    "type check always fails because {:?} is not a subtype of {:?}",
-                    t,
-                    orig_type
-                )
-                .with_ctx(ctx));
-            }
+            // if !t.subtype_of(&orig_type) {
+            //     return Err(anyhow::anyhow!(
+            //         "type check always fails because {:?} is not a subtype of {:?}",
+            //         t,
+            //         orig_type
+            //     )
+            //     .with_ctx(ctx));
+            // }
             Ok((
                 Expr {
                     itype: Type::NatRange(0_i32.into(), 1_i32.into()),
@@ -1685,6 +1685,23 @@ return x
         .unwrap_err()
         .to_string()
         .contains("index"));
+    }
+
+    #[test]
+    fn typecheck_issue15() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        dbg!(typecheck_program(
+            parse_program(
+                r"
+        2 ** 3 + 1
+    ",
+                module,
+                &std::path::PathBuf::from(""),
+            )
+            .unwrap(),
+        )
+        .unwrap());
     }
 
     #[test]
