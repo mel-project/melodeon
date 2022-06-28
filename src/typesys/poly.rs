@@ -19,13 +19,6 @@ pub struct Polynomial<CVar: Variable> {
 }
 
 impl<CVar: Variable> Polynomial<CVar> {
-    /// Creates the zero polynomial.
-    pub fn zero() -> Self {
-        Self {
-            terms: BTreeMap::new(),
-        }
-    }
-
     /// Finds all integers that when plugged into the polynomial, produce rhs.
     pub fn solve(&self, rhs: U256) -> List<U256> {
         log::trace!("solving {:?} = {}", self, rhs);
@@ -270,22 +263,4 @@ fn num_to_superscript(num: usize) -> String {
             _ => unreachable!(),
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::containers::Symbol;
-
-    use super::Polynomial;
-
-    #[test]
-    fn simple_poly() {
-        let mut poly: Polynomial<Symbol> = Polynomial::zero();
-        poly.terms = maplit::btreemap! {
-            maplit::btreemap!{
-                Symbol::from("x") => 2,
-            } => 1u8.into(),
-        };
-        dbg!(poly.solve(4u8.into()));
-    }
 }

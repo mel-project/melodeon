@@ -151,6 +151,10 @@ apply_expr  = {
     terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type)*
 }
 
+tfish_call_args = { "<" ~ ((tfish_type | tfish_cgvar) ~ ",")* ~ (tfish_type | tfish_cgvar) ~ ">"}
+tfish_type      = { type_name ~ "=" ~ type_expr }
+tfish_cgvar     = { cgvar_name ~ "=" ~ const_expr }
+
 call_args       = { "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
 field_access    = { "." ~ var_name }
 vector_ref      = { "[" ~ expr ~ "]" }

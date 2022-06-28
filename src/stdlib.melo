@@ -80,8 +80,8 @@ def n2b(b: Nat) = unsafe extern call "u256->bytes" (b) :! %[32]
 def ed25519_verify<$n>(msg: %[$n], public_key: %[], signature: %[]) =
     unsafe extern call "sigeok" ($n, msg, public_key, signature) :! Bool
 
-def print<T>(x: T): T =
-    unsafe extern call "print" (x) :! T
+# def print<T>(x: T): T =
+#     unsafe extern call "print" (x) :! T
 
 # Definitions for bools etc
 type False = {0}

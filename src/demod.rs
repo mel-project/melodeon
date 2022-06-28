@@ -167,7 +167,7 @@ fn mangle(defs: List<Ctx<RawDefn>>, source: ModuleId) -> List<Ctx<RawDefn>> {
                                 arg.with_ctx(ctx)
                             })
                             .collect(),
-                        rettype: rettype.map(|rt| mangle_type_expr(rt, source, &no_mangle)),
+                        rettype: rettype.map(|rt| mangle_type_expr(rt, source, &inner_nomangle)),
                         body: mangle_expr(body, source, &inner_nomangle),
                     })
                 }
