@@ -10,12 +10,14 @@ use super::poly::Polynomial;
 
 pub trait Variable: Clone + Hash + Eq + Debug + Ord {
     /// Possibly convert from a symbol. By default, just fails mercilessly.
-    fn try_from_sym(_: Symbol) -> Option<Self> {
-        None
-    }
+    fn try_from_sym(_: Symbol) -> Option<Self>;
 }
 
-impl Variable for Void {}
+impl Variable for Void {
+    fn try_from_sym(_: Symbol) -> Option<Self> {
+        panic!("cannot make a Void from a symbol")
+    }
+}
 
 impl Variable for Symbol {
     fn try_from_sym(s: Symbol) -> Option<Self> {

@@ -148,10 +148,10 @@ add_expr    = { mult_expr ~ ((append | add | sub) ~ mult_expr)* }
 mult_expr   = { uni_expr ~ ((exp ~ const_expr) | ((mul | div | modulo) ~ uni_expr))* }
 uni_expr    = { ((lnot | bnot) ~ apply_expr) | apply_expr }
 apply_expr  = {
-    terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type)*
+    terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type | tfish_call_args)*
 }
 
-tfish_call_args = { "<" ~ ((tfish_type | tfish_cgvar) ~ ",")* ~ (tfish_type | tfish_cgvar) ~ ">"}
+tfish_call_args = { "<" ~ ((tfish_type | tfish_cgvar) ~ ",")* ~ (tfish_type | tfish_cgvar) ~ ">" ~ call_args}
 tfish_type      = { type_name ~ "=" ~ type_expr }
 tfish_cgvar     = { cgvar_name ~ "=" ~ const_expr }
 

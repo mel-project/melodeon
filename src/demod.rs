@@ -223,9 +223,19 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         ),
         RawExpr::Var(v) => RawExpr::Var(mangle_sym(v, source, no_mangle)),
         RawExpr::CgVar(v) => RawExpr::CgVar(mangle_sym(v, source, no_mangle)),
-        RawExpr::Apply(f, args) => {
-            RawExpr::Apply(recurse(f), args.into_iter().map(recurse).collect())
-        }
+        RawExpr::Apply(f, t, c, args) => RawExpr::Apply(
+            recurse(f),
+            t.into_iter()
+                .map(|(k, v)| {
+                    (
+                        mangle_sym(k, source, no_mangle),
+                        mangle_type_expr(v, source, no_mangle),
+                    )
+                })
+                .collect(),
+            c,
+            args.into_iter().map(recurse).collect(),
+        ),
         RawExpr::Field(a, b) => RawExpr::Field(recurse(a), b),
         RawExpr::VectorRef(v, i) => RawExpr::VectorRef(recurse(v), recurse(i)),
         RawExpr::VectorSlice(v, i, j) => RawExpr::VectorSlice(recurse(v), recurse(i), recurse(j)),

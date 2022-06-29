@@ -35,7 +35,11 @@ impl Debug for TypeParam {
     }
 }
 
-impl Variable for TypeParam {}
+impl Variable for TypeParam {
+    fn try_from_sym(sym: Symbol) -> Option<Self> {
+        Some(Self(sym))
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CgParam(Symbol);
@@ -52,7 +56,11 @@ impl Variable for CgParam {
     }
 }
 
-impl Variable for i32 {}
+impl Variable for i32 {
+    fn try_from_sym(_: Symbol) -> Option<Self> {
+        panic!("cannot work")
+    }
+}
 
 fn assert_subtype<Tv: Variable, Cv: Variable>(
     ctx: Option<CtxLocation>,
@@ -554,7 +562,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 ),
             ))
         }
-        RawExpr::Apply(f, args) => {
+        RawExpr::Apply(f, tvars, cgvars, args) => {
             if let RawExpr::Var(f) = f.deref() {
                 let ftype = state
                     .lookup_fun(*f)
@@ -574,7 +582,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         .iter()
                         .map(|a| Ok(recurse(a.clone())?.0))
                         .collect::<CtxResult<List<_>>>()?;
-                    let generic_mapping = ftype
+                    let mut generic_mapping = ftype
                         .args
                         .iter()
                         .zip(typechecked_args.iter())
@@ -584,7 +592,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         })
                         .reduce(|a, b| a.union_with(b, |a, b| a.smart_union(&b)))
                         .unwrap_or_default();
-                    let cg_mapping = ftype
+                    let mut cg_mapping = ftype
                         .args
                         .iter()
                         .zip(typechecked_args.iter())
@@ -594,6 +602,17 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         })
                         .reduce(|a, b| a.union_with(b, |a, _| a))
                         .unwrap_or_default();
+                    // override with the things in the explicit turbofish
+                    for (k, v) in tvars {
+                        let k = Tv::try_from_sym(k).expect("wtf");
+                        let v = typecheck_type_expr(&state, v)?;
+                        generic_mapping.insert(k, v);
+                    }
+                    for (k, v) in cgvars {
+                        let k = Cv::try_from_sym(k).expect("wtf");
+                        let v = typecheck_const_expr(&state, v)?;
+                        cg_mapping.insert(k, v);
+                    }
                     for (arg, required_type) in typechecked_args.iter().zip(ftype.args.iter()) {
                         let required_type = required_type
                             .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())

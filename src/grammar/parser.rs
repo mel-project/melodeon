@@ -9,7 +9,7 @@ use tap::Tap;
 
 use crate::{
     containers::{List, Map, Symbol},
-    context::{ProjectRoot, Ctx, CtxLocation, CtxResult, ModuleId, ToCtx, ToCtxErr},
+    context::{Ctx, CtxLocation, CtxResult, ModuleId, ProjectRoot, ToCtx, ToCtxErr},
     grammar::{BinOp, UniOp},
 };
 
@@ -327,7 +327,8 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                     let var_name = Symbol::from(sym.as_str()).with_ctx(p2ctx(&sym, source));
                     let var_binding = parse_expr(value, source);
                     (var_name, var_binding)
-                }).collect();
+                })
+                .collect();
 
             let body = parse_expr(children.last().unwrap().clone(), source);
             RawExpr::Let(bindings, body).with_ctx(ctx)
@@ -372,8 +373,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
 
             if children.len() == 1 {
                 parse_expr(children.remove(0), source)
-            }
-            else if children.len() == 2 {
+            } else if children.len() == 2 {
                 let c1 = children.remove(0);
                 match c1.as_rule() {
                     Rule::bnot => {
@@ -388,8 +388,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                     }
                     _ => unreachable!(),
                 }
-            }
-            else {
+            } else {
                 let mut toret = parse_expr(children.remove(0), source);
                 for pair in children.chunks_exact(2) {
                     if let [op, child] = pair {
@@ -451,7 +450,42 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                         let arguments = child.into_inner();
                         let arguments: List<Ctx<RawExpr>> =
                             arguments.map(|a| parse_expr(a, source)).collect();
-                        toret = RawExpr::Apply(toret, arguments).with_ctx(ctx);
+                        toret = RawExpr::Apply(
+                            toret,
+                            Default::default(),
+                            Default::default(),
+                            arguments,
+                        )
+                        .with_ctx(ctx);
+                    }
+                    Rule::tfish_call_args => {
+                        let inner = child.into_inner().collect::<Vec<_>>();
+                        assert!(!inner.is_empty());
+                        let mut cgvar_map = Map::new();
+                        let mut tvar_map = Map::new();
+                        for child in inner.iter() {
+                            match child.as_rule() {
+                                Rule::tfish_cgvar => {
+                                    let cc = child.clone().into_inner().collect::<Vec<_>>();
+                                    cgvar_map.insert(
+                                        Symbol::from(cc[0].as_str()),
+                                        parse_const_expr(cc[1].clone(), source),
+                                    );
+                                }
+                                Rule::tfish_type => {
+                                    let cc = child.clone().into_inner().collect::<Vec<_>>();
+                                    tvar_map.insert(
+                                        Symbol::from(cc[0].as_str()),
+                                        parse_type_expr(cc[1].clone(), source),
+                                    );
+                                }
+                                _ => {}
+                            }
+                        }
+                        let arguments = inner.last().unwrap().clone().into_inner();
+                        let arguments: List<Ctx<RawExpr>> =
+                            arguments.map(|a| parse_expr(a, source)).collect();
+                        toret = RawExpr::Apply(toret, tvar_map, cgvar_map, arguments).with_ctx(ctx)
                     }
                     Rule::field_access => {
                         let field_name = child.into_inner().next().unwrap();

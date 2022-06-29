@@ -3,9 +3,9 @@ use ethnum::U256;
 use tap::Pipe;
 
 use crate::{
-    typesys::{Type, Variable},
     containers::{List, Map, Set, Symbol},
     context::{Ctx, ModuleId},
+    typesys::{Type, Variable},
 };
 
 /// A whole program.
@@ -89,7 +89,13 @@ pub enum RawExpr {
     Var(Symbol),
     CgVar(Symbol),
 
-    Apply(Ctx<Self>, List<Ctx<Self>>),
+    Apply(
+        Ctx<Self>,
+        Map<Symbol, Ctx<RawTypeExpr>>,
+        Map<Symbol, Ctx<RawConstExpr>>,
+        List<Ctx<Self>>,
+    ),
+
     Field(Ctx<Self>, Ctx<Symbol>),
     VectorRef(Ctx<Self>, Ctx<Self>),
     VectorSlice(Ctx<Self>, Ctx<Self>, Ctx<Self>),
@@ -289,10 +295,14 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
 }
 
 impl RawExpr {
-    pub fn free_variables<Tv: Variable, Cv: Variable>(&self, var_set: &Map<Symbol, Type<Tv,Cv>>)
-    -> Set<Symbol> {
+    pub fn free_variables<Tv: Variable, Cv: Variable>(
+        &self,
+        var_set: &Map<Symbol, Type<Tv, Cv>>,
+    ) -> Set<Symbol> {
         let vars = expr_parents(self);
-        vars.into_iter().filter(|sym| var_set.contains_key(sym)).collect()
+        vars.into_iter()
+            .filter(|sym| var_set.contains_key(sym))
+            .collect()
     }
 }
 
@@ -304,14 +314,16 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::Var(var) => Set::unit(*var),
         //RawExpr::Let(var, val, body) => rec(val).union(rec(body)).without(var),
         RawExpr::Let(binds, body) => {
-            let vars: Vec<Ctx<Symbol>> = binds.iter().map(|(v,_)| v.clone()).collect();
-            let vals: Vec<Ctx<RawExpr>> = binds.iter().map(|(_,v)| v.clone()).collect();
+            let vars: Vec<Ctx<Symbol>> = binds.iter().map(|(v, _)| v.clone()).collect();
+            let vals: Vec<Ctx<RawExpr>> = binds.iter().map(|(_, v)| v.clone()).collect();
             vars.iter().fold(
-                vals.iter().fold(Set::new(), |acc, v| acc.union(rec(v)))
+                vals.iter()
+                    .fold(Set::new(), |acc, v| acc.union(rec(v)))
                     .union(rec(body)),
-                |acc,var| acc.without(var))
+                |acc, var| acc.without(var),
+            )
         }
-        RawExpr::Apply(fn_name, args) => args
+        RawExpr::Apply(fn_name, _, _, args) => args
             .iter()
             .fold(rec(fn_name), |acc, arg| acc.union(rec(arg))),
         RawExpr::LitStruct(s_name, fields) => fields
@@ -349,8 +361,8 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::LitBytes(_) => Set::new(),
         RawExpr::Unsafe(s) => rec(s),
         RawExpr::Extern(_) => Set::new(),
-        RawExpr::ExternApply(_, args) => args
-            .iter()
-            .fold(Set::new(), |acc, arg| acc.union(rec(arg))),
+        RawExpr::ExternApply(_, args) => {
+            args.iter().fold(Set::new(), |acc, arg| acc.union(rec(arg)))
+        }
     }
 }
