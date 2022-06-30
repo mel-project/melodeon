@@ -427,8 +427,12 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
             &Type::Vector(v.iter().map(|t| t.1.clone()).collect()),
             inner,
         ),
-        Type::Union(_, _) => todo!(),
-        Type::DynVectorof(_) => todo!(),
+        Type::Union(t, u) => {
+            let t_check = generate_type_check(t, inner.clone());
+            let u_check = generate_type_check(u, inner);
+            [Value::symbol("or"), t_check, u_check].sexpr()
+        }
+        Type::DynVectorof(_) => panic!("is expressions on dynamic vectors not yet supported"),
         Type::Bytes(n) => {
             let is_bytes_expr = [
                 Value::symbol("="),
@@ -563,10 +567,11 @@ mod tests {
                         def succ<$n>(x: {$n..$n}) = $n + 1
                         def peel<$n>(x : {$n+1..$n+1}) = $n
                         --- 
-                        let x = 0 :: Nat in
+                        let res = (let x = 0 :: Nat in
                         loop 100 do
                             set! x = x + 1
-                        return x
+                        return x) in
+                        res is Nat | [Nat, Nat]
                         ",
                         module,
                         &std::path::PathBuf::from(""),
