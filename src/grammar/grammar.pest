@@ -145,7 +145,7 @@ bitlogic_expr = { rel_expr ~ ((bor | band | bxor) ~ rel_expr)*}
 rel_expr    = { shift_expr ~ ((equal | le | lt | ge | gt) ~ shift_expr)* }
 shift_expr  = { add_expr ~ ((lshift | rshift) ~ add_expr)* }
 add_expr    = { mult_expr ~ ((append | add | sub) ~ mult_expr)* }
-mult_expr   = { uni_expr ~ ((exp ~ const_expr) | ((mul | div | modulo) ~ uni_expr))* }
+mult_expr   = { uni_expr ~ ((exp | mul | div | modulo) ~ uni_expr)* }
 uni_expr    = { ((lnot | bnot) ~ apply_expr) | apply_expr }
 apply_expr  = {
     terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type | tfish_call_args)*

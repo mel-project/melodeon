@@ -330,6 +330,22 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         TypeFacts::empty(),
                     ))
                 }
+
+                crate::grammar::BinOp::Exp => {
+                    check_nats()?;
+                    // cannot subtract CGs correctly at the moment
+                    Ok((
+                        Expr {
+                            itype: Type::all_nat(),
+                            inner: ExprInner::Exp(
+                                ConstExpr::Lit(U256::MAX),
+                                a_expr?.into(),
+                                b_expr?.into(),
+                            ),
+                        },
+                        TypeFacts::empty(),
+                    ))
+                }
                 crate::grammar::BinOp::Mul => {
                     let (a_range, b_range) = check_nats()?;
                     // add the two ranges
@@ -897,28 +913,28 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .with_ctx(ctx))
             }
         }
-        RawExpr::Exp(a, b) => {
-            // TODO infer this from b
-            let k = ConstExpr::Lit(255_u32.into());
-            let a: std::sync::Arc<Expr<Tv, Cv>> = recurse(a)?.0.into();
-            let b = typecheck_const_expr(&state, b)?;
+        // RawExpr::Exp(a, b) => {
+        //     // TODO infer this from b
+        //     let k = ConstExpr::Lit(255_u32.into());
+        //     let a: std::sync::Arc<Expr<Tv, Cv>> = recurse(a)?.0.into();
+        //     let b = typecheck_const_expr(&state, b)?;
 
-            // Check that a is Nat
-            assert_subtype(ctx, &a.itype, &Type::all_nat())?;
-            /*
-            let template: Type<Void, i32> =
-                Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
-            let a_range = template.unify_cvars(&a_expr.itype).unwrap();
-            */
+        //     // Check that a is Nat
+        //     assert_subtype(ctx, &a.itype, &Type::all_nat())?;
+        //     /*
+        //     let template: Type<Void, i32> =
+        //         Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
+        //     let a_range = template.unify_cvars(&a_expr.itype).unwrap();
+        //     */
 
-            Ok((
-                Expr {
-                    itype: a.itype.clone(),
-                    inner: ExprInner::Exp(k, a, b),
-                },
-                TypeFacts::empty(),
-            ))
-        }
+        //     Ok((
+        //         Expr {
+        //             itype: a.itype.clone(),
+        //             inner: ExprInner::Exp(k, a, b),
+        //         },
+        //         TypeFacts::empty(),
+        //     ))
+        // }
         RawExpr::Loop(iterations, body, end) => {
             let iterations = typecheck_const_expr(&state, iterations)?;
             //let free_vars = body.iter().map(|(sym, val)| val.free_variables(state.var_scope()));
@@ -1515,7 +1531,7 @@ fn monomorphize_inner(
             ExprInner::Exp(k, a, b) => ExprInner::Exp(
                 k.fill(|c| cvar_scope.get(c).cloned().unwrap()),
                 recurse(&a).into(),
-                b.fill(|c| cvar_scope.get(c).cloned().unwrap()),
+                recurse(&b).into(),
             ),
             ExprInner::Let(binds, i) => ExprInner::Let(
                 binds

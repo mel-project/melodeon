@@ -240,11 +240,6 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         RawExpr::VectorRef(v, i) => RawExpr::VectorRef(recurse(v), recurse(i)),
         RawExpr::VectorSlice(v, i, j) => RawExpr::VectorSlice(recurse(v), recurse(i), recurse(j)),
         RawExpr::VectorUpdate(v, i, x) => RawExpr::VectorUpdate(recurse(v), recurse(i), recurse(x)),
-        RawExpr::Exp(a, b) => RawExpr::Exp(
-            recurse(a),
-            mangle_const_expr(b, source, no_mangle),
-            //recurse(b),
-        ),
         RawExpr::Loop(n, bod, end) => RawExpr::Loop(
             mangle_const_expr(n, source, no_mangle),
             bod.into_iter()

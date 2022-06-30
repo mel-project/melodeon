@@ -131,9 +131,10 @@ fn codegen_expr(expr: &Expr) -> Value {
         }
         ExprInner::Exp(k, base, exp) => [
             Value::symbol("**"),
-            Value::Number(k.eval().as_u8().into()),
+            // TODO do something a little more intelligent here
+            Value::Number(255.into()),
             codegen_expr(base),
-            u256_to_sexpr(exp.eval()),
+            codegen_expr(exp),
         ]
         .sexpr(),
         ExprInner::If(a, b, c) => [
@@ -524,6 +525,28 @@ mod tests {
     }
 
     #[test]
+    fn expt_codegen() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        eprintln!(
+            "{}",
+            codegen_program(
+                typecheck_program(
+                    parse_program(
+                        r"
+                        2**5
+                        ",
+                        module,
+                        &std::path::PathBuf::from(""),
+                    )
+                    .unwrap()
+                )
+                .unwrap()
+            )
+        );
+    }
+
+    #[test]
     fn tricky_codegen() {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
@@ -554,6 +577,7 @@ mod tests {
             )
         );
     }
+
     #[test]
     fn simple_codegen() {
         init_logs();

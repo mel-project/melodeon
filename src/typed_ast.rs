@@ -41,8 +41,9 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
             }
             //ExprInner::Let(s, b, i) => ExprInner::Let(*s, recurse(b).into(), recurse(i).into()),
             ExprInner::Let(binds, i) => ExprInner::Let(
-                binds.iter().map(|(s,b)| (*s, recurse(b).into())).collect(),
-                recurse(i).into()),
+                binds.iter().map(|(s, b)| (*s, recurse(b).into())).collect(),
+                recurse(i).into(),
+            ),
             ExprInner::Apply(f, args) => ExprInner::Apply(*f, args.iter().map(recurse).collect()),
             ExprInner::ApplyGeneric(f, tg, cg, args) => ExprInner::ApplyGeneric(
                 *f,
@@ -78,7 +79,12 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
 pub enum ExprInner<TVar: Variable, CVar: Variable> {
     BinOp(BinOp, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     UniOp(UniOp, Arc<Expr<TVar, CVar>>),
-    Exp(ConstExpr<CVar>, Arc<Expr<TVar, CVar>>, ConstExpr<CVar>),
+    /// The first one is an **upper bound** for how big the exponent is
+    Exp(
+        ConstExpr<CVar>,
+        Arc<Expr<TVar, CVar>>,
+        Arc<Expr<TVar, CVar>>,
+    ),
     If(
         Arc<Expr<TVar, CVar>>,
         Arc<Expr<TVar, CVar>>,
@@ -142,7 +148,7 @@ impl<TVar: Variable, CVar: Variable> ExprInner<TVar, CVar> {
 /// Unary operator
 #[derive(Clone, Copy, Debug)]
 pub enum UniOp {
-    Bnot
+    Bnot,
 }
 
 /// Binary operator
