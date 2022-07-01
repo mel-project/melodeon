@@ -52,8 +52,8 @@ def range<$n>(x: {$n..$n}) =
     unsafe let accum = [] :! [Nat; $n] in
     let ctr = 0 :: Nat in
     loop $n do
-        set! accum = (accum ++ [ctr]) :! [Nat; $n]; 
-        set! ctr = ctr + 1
+        accum <- (accum ++ [ctr]) :! [Nat; $n]; 
+        ctr <- ctr + 1
     return accum
 
 def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =

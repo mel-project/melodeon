@@ -130,7 +130,7 @@ loop_expr = {
 }
 
 set_bang = {
-    "set!" ~ var_name ~ "=" ~ expr
+    var_name ~ "<-" ~ expr
 }
 
 bin_expr = _{
