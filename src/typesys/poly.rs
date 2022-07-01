@@ -76,7 +76,7 @@ impl<CVar: Variable> Polynomial<CVar> {
                     .product::<U256>()
                     * v
             })
-            .sum()
+            .fold(U256::ZERO, |a, b| a.saturating_add(b))
     }
 
     /// Checked subtraction.

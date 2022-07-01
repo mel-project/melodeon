@@ -895,9 +895,9 @@ impl<CVar: Variable> ConstExpr<CVar> {
     pub fn try_eval(&self) -> Option<U256> {
         match self {
             ConstExpr::Var(_) => None,
-            ConstExpr::Add(x, y) => Some(x.try_eval()?.wrapping_add(y.try_eval()?)),
+            ConstExpr::Add(x, y) => Some(x.try_eval()?.saturating_add(y.try_eval()?)),
             ConstExpr::Lit(x) => Some(*x),
-            ConstExpr::Mul(x, y) => Some(x.try_eval()?.wrapping_mul(y.try_eval()?)),
+            ConstExpr::Mul(x, y) => Some(x.try_eval()?.saturating_add(y.try_eval()?)),
         }
     }
 
