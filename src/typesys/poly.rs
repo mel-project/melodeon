@@ -197,7 +197,7 @@ impl<CVar: Variable> Add<Self> for Polynomial<CVar> {
     fn add(mut self, rhs: Self) -> Self::Output {
         for (k, v) in rhs.terms {
             let r = self.terms.entry(k).or_default();
-            *r = r.wrapping_add(v);
+            *r = r.saturating_add(v);
         }
         self
     }
