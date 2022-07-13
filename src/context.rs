@@ -10,9 +10,9 @@ use std::{
 };
 
 use dashmap::DashMap;
-use std::path::PathBuf;
 use internment::Intern;
 use once_cell::sync::Lazy;
+use std::path::PathBuf;
 
 pub type CtxResult<T> = Result<T, CtxErr>;
 
@@ -95,14 +95,13 @@ impl<T> From<T> for Ctx<T> {
     }
 }
 
-impl<T: Display> Display for Ctx<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: Display> Ctx<T> {
+    /// Formats the error nicely, with ANSI colors and such.
+    pub fn pretty_print(&self, source_lookup: impl Fn(ModuleId) -> Option<String>) -> String {
         let error_location: String;
         let mut detailed_line: Option<String> = None;
         if let Some(ctx) = self.ctx() {
-            if let Ok(source_full_string) =
-                std::fs::read_to_string(Path::new(&ctx.source.to_string()))
-            {
+            if let Some(source_full_string) = source_lookup(ctx.source) {
                 let mut char_counter = 0;
                 let mut errloc = ctx.source.to_string();
                 for (lineno, line) in source_full_string.split('\n').enumerate() {
@@ -144,10 +143,19 @@ impl<T: Display> Display for Ctx<T> {
 
         if let Some(line) = detailed_line {
             let lines = line.lines().collect::<Vec<&str>>().join("\n\t");
-            std::fmt::Display::fmt(&format!("{}\n\t{}", err_str, lines), f)
+            format!("{}\n\t{}", err_str, lines)
         } else {
-            std::fmt::Display::fmt(&err_str, f)
+            err_str
         }
+    }
+}
+
+impl<T: Display> Display for Ctx<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(
+            &self.pretty_print(|mid| std::fs::read_to_string(&mid.to_string()).ok()),
+            f,
+        )
     }
 }
 
