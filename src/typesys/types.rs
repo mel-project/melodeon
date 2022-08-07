@@ -897,7 +897,7 @@ impl<CVar: Variable> ConstExpr<CVar> {
             ConstExpr::Var(_) => None,
             ConstExpr::Add(x, y) => Some(x.try_eval()?.saturating_add(y.try_eval()?)),
             ConstExpr::Lit(x) => Some(*x),
-            ConstExpr::Mul(x, y) => Some(x.try_eval()?.saturating_add(y.try_eval()?)),
+            ConstExpr::Mul(x, y) => Some(x.try_eval()?.saturating_mul(y.try_eval()?)),
         }
     }
 
