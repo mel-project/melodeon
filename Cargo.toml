@@ -1,6 +1,6 @@
 [package]
 name = "melodeon"
-version = "0.5.3"
+version = "0.5.11"
 edition = "2021"
 description = "High-level language that targets the Themelio blockchains' MelVM covenants"
 license = "ISC"
@@ -40,6 +40,7 @@ thiserror = "1.0.30"
 
 [dev-dependencies]
 env_logger="0.9"
+
 
 # [target.'cfg(fuzzing)'.dependencies] 
 # honggfuzz= "0.5.54"

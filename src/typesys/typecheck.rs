@@ -1691,7 +1691,7 @@ def peel<$n>(x : {$n+1..$n+1}) = $n
 --- 
 let x = 0 :: Nat in
 loop 100 do
-set! x = x + 1
+    x <- x + 1
 return x
                 ",
                     module,
@@ -1754,7 +1754,7 @@ def peel<$n>(x : {$n+1..$n+1}) = $n
 --- 
 let x = 0 :: Nat in
 loop 100 do
-set! x = x + 1
+x <- x + 1
 return 
 for x in [1, 2, 3] collect x*2
                 ",

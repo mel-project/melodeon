@@ -52,8 +52,8 @@ def range<$n>(x: {$n..$n}) =
     unsafe let accum = [] :! [Nat; $n] in
     let ctr = 0 :: Nat in
     loop $n do
-        set! accum = (accum ++ [ctr]) :! [Nat; $n]; 
-        set! ctr = ctr + 1
+        accum <- (accum ++ [ctr]) :! [Nat; $n]; 
+        ctr <- ctr + 1
     return accum
 
 def zip<$n, T, U>(x: [T; $n], y: [U; $n]) =
@@ -79,6 +79,11 @@ def n2b(b: Nat) = unsafe extern call "u256->bytes" (b) :! %[32]
 # signatures
 def ed25519_verify<$n>(msg: %[$n], public_key: %[], signature: %[]) =
     unsafe extern call "sigeok" ($n, msg, public_key, signature) :! Bool
+
+# useful helper
+def ed25519_signed_by(public_key: %[32], idx: Nat) =
+	let sig = vref(env_spender_tx().sigs, idx) in
+	sig && ed25519_verify(env_spender_tx_hash(), public_key, sig)
 
 # def print<T>(x: T): T =
 #     unsafe extern call "print" (x) :! T

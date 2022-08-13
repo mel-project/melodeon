@@ -593,7 +593,7 @@ mod tests {
                         --- 
                         let res = (let x = 0 :: Nat in
                         loop 100 do
-                            set! x = x + 1
+                            x <- x + 1
                         return x) in
                         res is Nat | [Nat, Nat]
                         ",

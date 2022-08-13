@@ -13,12 +13,9 @@ use typesys::Type;
 
 /// Compiles a melodeon program by its literal string, resolving dependencies assuming that the string was read from a file at the given module path. Returns the Mil representation, as well as the type of the
 pub fn compile(melo_code: &str, module_path: &Path) -> context::CtxResult<(String, Type)> {
-    let mut root_path = module_path.canonicalize().map_err(|ctx| {
-        anyhow::anyhow!(format!(
-            "Failed to get absolute path for input file\n{}",
-            ctx
-        ))
-    })?;
+    let mut root_path = module_path
+        .canonicalize()
+        .unwrap_or_else(|_| module_path.to_owned());
     if root_path.is_file() {
         root_path.pop();
     }
