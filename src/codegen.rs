@@ -634,4 +634,26 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn vref_stuff() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        eprintln!(
+            "{}",
+            codegen_program(
+                typecheck_program(
+                    parse_program(
+                        r#"
+                        let nested = [[0,1], [2,3], [4,5]] in for val in vref(nested, 1) collect val + 1
+                        "#,
+                        module,
+                        &std::path::PathBuf::from(""),
+                    )
+                    .unwrap()
+                )
+                .unwrap()
+            )
+        );
+    }
 }

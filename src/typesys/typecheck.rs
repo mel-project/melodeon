@@ -1328,7 +1328,13 @@ fn vector_info<Tv: Variable, Cv: Variable>(
     if val_lengths.len() == 1 {
         Ok((
             val_lengths.into_iter().next().unwrap(),
-            val.itype.index(None).unwrap().into_owned(),
+            val.itype
+                .index(None)
+                .context(anyhow::anyhow!(
+                    "cannot do comprehension over the type {:?}",
+                    val.itype
+                ))?
+                .into_owned(),
         ))
     } else {
         return Err(anyhow::anyhow!(
