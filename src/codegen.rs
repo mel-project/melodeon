@@ -222,7 +222,13 @@ fn codegen_expr(expr: &Expr) -> Value {
         ]
         .sexpr(),
         ExprInner::Fail => Value::symbol("fail!"),
-        ExprInner::LitBytes(b) => Value::symbol(format!("0x{}", hex::encode(&b))),
+        ExprInner::LitBytes(b) => {
+            if b.is_empty() {
+                Value::symbol("\"\"")
+            } else {
+                Value::symbol(format!("0x{}", hex::encode(&b)))
+            }
+        }
         ExprInner::ExternApply(f, args) => std::iter::once(Value::symbol(f.as_str()))
             .chain(args.iter().map(codegen_expr))
             .sexpr(),
@@ -597,6 +603,28 @@ mod tests {
                         return x) in
                         res is Nat | [Nat, Nat]
                         ",
+                        module,
+                        &std::path::PathBuf::from(""),
+                    )
+                    .unwrap()
+                )
+                .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn empty_byte_string() {
+        init_logs();
+        let module = ModuleId::from_path(Path::new("whatever.melo"));
+        eprintln!(
+            "{}",
+            codegen_program(
+                typecheck_program(
+                    parse_program(
+                        r#"
+                        "test" ++ ""
+                        "#,
                         module,
                         &std::path::PathBuf::from(""),
                     )
