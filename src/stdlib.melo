@@ -71,6 +71,10 @@ def vref<T>(x: [T;], n: Nat): T | False =
     else
         0
 
+# stopgaps
+
+def unsafe_bslice(b: %[], i: Nat, j: Nat) = unsafe extern call "b-slice" (b, i, j) :! %[]
+
 # Conversions
 
 def b2n(b: %[32]) = unsafe extern call "bytes->u256" (b) :! Nat
