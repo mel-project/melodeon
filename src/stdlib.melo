@@ -91,7 +91,7 @@ def ed25519_signed_by(public_key: %[32], idx: Nat) =
 
 # Blake3 hash function
 def blake3<$n>(msg: %[$n]) =
-	unsafe extern call "hash" (msg) :! %[32]
+	unsafe extern call "hash" ($n, msg) :! %[32]
 
 # def print<T>(x: T): T =
 #     unsafe extern call "print" (x) :! T
