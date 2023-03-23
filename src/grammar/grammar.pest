@@ -4,7 +4,7 @@ nat_literal = @{ ASCII_DIGIT+ }
 type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
 var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
 		  (reserved ~ var_name) }
-cgvar_name  = @{ "$" ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
+
 add         = {"+"}
 sub         = {"-"}
 append      = {"++"}
@@ -51,8 +51,7 @@ definition = {
 fun_def = { "def" ~ var_name ~ "(" ~ fun_args ~ ")" ~ (":" ~ type_expr)? ~ "=" ~ expr }
 fun_def_gen = { "def" ~ var_name ~ "<" ~ generic_params ~ ">" ~ "(" ~ fun_args ~ ")" ~ (":" ~ type_expr)? ~ "=" ~ expr }
 generic_params = {
-    ((cgvar_name) ~ ",")* ~ cgvar_name |
-    ((cgvar_name) ~ ",")* ~ ((type_name) ~ ",")* ~ type_name
+    ((type_name) ~ ",")* ~ type_name
 }
 
 fun_args = {
@@ -76,28 +75,15 @@ type_qmark = { type_terminal ~ "?"}
 type_terminal = _{
     type_vector             |
     type_dynvectorof	    |
-    type_vectorof           |
     type_name               |
-    type_natrange           |
-    type_bytes              |
     type_dynbytes           |
 
     "(" ~ type_expr ~ ")"  
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" } 
-type_vectorof = { "[" ~ type_expr ~ ";" ~ const_expr ~ "]" }
 type_dynvectorof = { "[" ~ type_expr ~ ";" ~ "]" }
-type_bytes = {"%[" ~ const_expr ~ "]" }
 type_dynbytes = {"%[" ~ "]" }
-type_natrange = { "{" ~ const_expr ~ (".." ~ const_expr)? ~ "}" }
 
-// const-expr. A precedence tower, similar to the bin-expr one.
-const_expr = _{ 
-    const_add_expr
-}
-const_add_expr = { const_mult_expr ~ (add ~ const_mult_expr)* }
-const_mult_expr = { const_term_expr ~ (mul ~ const_term_expr)* }
-const_term_expr = _{ nat_literal | cgvar_name }
 
 // expression
 expr = _{
@@ -105,11 +91,10 @@ expr = _{
     bin_expr
 }
 
-cflow_expr = _{ let_expr | let_q_expr | if_expr | loop_expr | fail_expr | assert_expr | fold_expr | for_expr }
+cflow_expr = _{ let_expr | let_q_expr | if_expr | fail_expr | assert_expr }
 fail_expr = {"fail!"}
 assert_expr = {"assert!" ~ expr ~ "in" ~ expr}
-for_expr = {"for" ~ var_name ~ "in" ~ expr ~ "collect" ~ expr}
-fold_expr = {"for" ~ var_name ~ "in" ~ expr ~ "fold" ~ var_name ~ "=" ~ expr ~ "with" ~ expr} 
+
 
 let_expr = {
     //"let" ~ var_name ~ "=" ~ expr ~ "in" ~ expr
@@ -125,9 +110,6 @@ if_expr = {
     "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr
 }
 
-loop_expr = {
-    "loop" ~ const_expr ~ "do" ~ (set_bang ~ ";")* ~ (set_bang)? ~ "return" ~ expr
-}
 
 set_bang = {
     var_name ~ "<-" ~ expr
@@ -151,9 +133,8 @@ apply_expr  = {
     terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type | tfish_call_args)*
 }
 
-tfish_call_args = { "<" ~ ((tfish_type | tfish_cgvar) ~ ",")* ~ (tfish_type | tfish_cgvar) ~ ">" ~ call_args}
+tfish_call_args = { "<" ~ (tfish_type ~ ",")* ~ tfish_type ~ ">" ~ call_args}
 tfish_type      = { type_name ~ "=" ~ type_expr }
-tfish_cgvar     = { cgvar_name ~ "=" ~ const_expr }
 
 call_args       = { "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
 field_access    = { "." ~ var_name }
@@ -173,7 +154,7 @@ terminal_expr   = _{
     extern_call_expr | 
     extern_expr |
     nat_literal |
-    cgvar_name | 
+
     var_name |
     bytes_literal  |
     vector_literal |

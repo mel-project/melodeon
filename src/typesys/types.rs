@@ -1,4 +1,3 @@
-use ethnum::U256;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::{borrow::Cow, fmt::Debug};

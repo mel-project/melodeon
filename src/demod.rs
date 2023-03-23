@@ -268,30 +268,11 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
             RawExpr::AsType(recurse(a), mangle_type_expr(t, source, no_mangle))
         }
         RawExpr::Fail => RawExpr::Fail,
-        RawExpr::For(sym, bind, body) => {
-            let mut inner_no_mangle = no_mangle.clone();
-            inner_no_mangle.insert(*sym);
-            RawExpr::For(
-                sym,
-                recurse(bind),
-                mangle_expr(body, source, &inner_no_mangle),
-            )
-        }
+
         RawExpr::Transmute(a, t) => {
             RawExpr::Transmute(recurse(a), mangle_type_expr(t, source, no_mangle))
         }
-        RawExpr::ForFold(loop_sym, loop_bind, accum_sym, accum_bind, body) => {
-            let mut inner_no_mangle = no_mangle.clone();
-            inner_no_mangle.insert(*loop_sym);
-            inner_no_mangle.insert(*accum_sym);
-            RawExpr::ForFold(
-                loop_sym,
-                recurse(loop_bind),
-                accum_sym,
-                recurse(accum_bind),
-                mangle_expr(body, source, &inner_no_mangle),
-            )
-        }
+
         RawExpr::LitBytes(b) => RawExpr::LitBytes(b),
         RawExpr::LitBVec(vv) => RawExpr::LitBVec(vv.into_iter().map(recurse).collect()),
         RawExpr::Unsafe(s) => RawExpr::Unsafe(recurse(s)),

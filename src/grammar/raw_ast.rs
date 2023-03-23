@@ -58,8 +58,7 @@ pub enum RawTypeExpr {
 pub enum RawExpr {
     //Let(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
     Let(List<(Ctx<Symbol>, Ctx<Self>)>, Ctx<Self>),
-    For(Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
-    ForFold(Ctx<Symbol>, Ctx<Self>, Ctx<Symbol>, Ctx<Self>, Ctx<Self>),
+
     If(Ctx<Self>, Ctx<Self>, Ctx<Self>),
     Fail,
 
@@ -280,12 +279,7 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::LitVec(v) | RawExpr::LitBVec(v) => {
             v.iter().fold(Set::new(), |acc, e| acc.union(rec(e)))
         }
-        RawExpr::For(var, val, body) => rec(val).union(rec(body)).without(var),
-        RawExpr::ForFold(var, val, avar, aval, body) => rec(val)
-            .union(rec(aval))
-            .union(rec(body))
-            .without(var)
-            .without(avar),
+
         RawExpr::Fail => Set::new(),
         RawExpr::LitNum(_) => Set::new(),
 

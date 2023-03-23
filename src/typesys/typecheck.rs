@@ -757,9 +757,7 @@ pub fn typecheck_expr<Tv: Variable>(
             },
             TypeFacts::empty(),
         )),
-        RawExpr::For(sym, val, body) => {
-            todo!()
-        }
+
         RawExpr::Transmute(inner, t) => {
             if state.lookup_safety() {
                 Err(anyhow::anyhow!("cannot transmute without unsafe").with_ctx(ctx))
@@ -770,9 +768,7 @@ pub fn typecheck_expr<Tv: Variable>(
                 Ok(inner)
             }
         }
-        RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body) => {
-            todo!()
-        }
+
         RawExpr::LitBytes(b) => Ok((
             ExprInner::LitBytes(b).wrap(Type::DynBytes),
             TypeFacts::empty(),
@@ -826,17 +822,6 @@ pub fn typecheck_expr<Tv: Variable>(
             ))
         }
     }
-}
-
-fn vector_info<Tv: Variable>(val: &Expr<Tv>) -> anyhow::Result<Type<Tv>> {
-    todo!()
-}
-
-fn type_bytes_ref<Tv: Variable, Cv: Variable>(
-    vtype: &Type<Tv>,
-    itype: &Type<Tv>,
-) -> anyhow::Result<Type<Tv>> {
-    todo!()
 }
 
 fn type_vector_ref<Tv: Variable>(vtype: &Type<Tv>, itype: &Type<Tv>) -> anyhow::Result<Type<Tv>> {

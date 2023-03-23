@@ -78,21 +78,19 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId, root: &Path) -> Ctx<RawD
                 pair.clone().into_inner().count() == if rule == Rule::fun_def { 4 } else { 5 };
             let mut children = pair.into_inner();
             let fun_name = children.next().unwrap();
-            let (cgvars, genvars) = if rule == Rule::fun_def_gen {
-                let mut cgvars = List::new();
+            let genvars = if rule == Rule::fun_def_gen {
                 let mut genvars = List::new();
                 for elem in children.next().unwrap().into_inner() {
                     let elem_ctx = p2ctx(&elem, source);
                     match elem.as_rule() {
-                        Rule::cgvar_name => &mut cgvars,
                         Rule::type_name => &mut genvars,
                         _ => unreachable!(),
                     }
                     .push(Symbol::from(elem.as_str()).with_ctx(elem_ctx));
                 }
-                (cgvars, genvars)
+                genvars
             } else {
-                (List::new(), List::new())
+                List::new()
             };
             let fun_name = Symbol::from(fun_name.as_str()).with_ctx(p2ctx(&fun_name, source));
             let fun_args = parse_fun_args(children.next().unwrap(), source);
@@ -288,25 +286,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 RawExpr::BinOp(BinOp::Land.into(), RawExpr::Var(*var_name).into(), body);
             RawExpr::Let([(var_name, var_binding)].into(), body_container.into()).with_ctx(ctx)
         }
-        Rule::for_expr => {
-            let mut children = pair.into_inner();
-            let var_name = children.next().unwrap();
-            let var_name = Symbol::from(var_name.as_str()).with_ctx(p2ctx(&var_name, source));
-            let var_binding = parse_expr(children.next().unwrap(), source);
-            let body = parse_expr(children.next().unwrap(), source);
-            RawExpr::For(var_name, var_binding, body).with_ctx(ctx)
-        }
-        Rule::fold_expr => {
-            let mut children = pair.into_inner();
-            let var_name = children.next().unwrap();
-            let var_name = Symbol::from(var_name.as_str()).with_ctx(p2ctx(&var_name, source));
-            let var_binding = parse_expr(children.next().unwrap(), source);
-            let accum_name = children.next().unwrap();
-            let accum_name = Symbol::from(accum_name.as_str()).with_ctx(p2ctx(&accum_name, source));
-            let accum_binding = parse_expr(children.next().unwrap(), source);
-            let body = parse_expr(children.next().unwrap(), source);
-            RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body).with_ctx(ctx)
-        }
+
         Rule::rel_expr
         | Rule::add_expr
         | Rule::mult_expr
@@ -484,14 +464,6 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 .map(|c| parse_expr(c, source))
                 .collect();
             RawExpr::LitBVec(children).with_ctx(ctx)
-        }
-        Rule::for_literal => {
-            let mut children = pair.into_inner();
-            let body = parse_expr(children.next().unwrap(), source);
-            let varname = children.next().unwrap();
-            let varname = Symbol::from(varname.as_str()).with_ctx(p2ctx(&varname, source));
-            let varbind = parse_expr(children.next().unwrap(), source);
-            RawExpr::For(varname, varbind, body).with_ctx(ctx)
         }
 
         Rule::struct_literal => {
