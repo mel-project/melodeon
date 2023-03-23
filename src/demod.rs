@@ -6,9 +6,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use crate::{
     containers::{List, Set, Symbol},
     context::{Ctx, CtxErr, CtxResult, ModuleId, ToCtx, ToCtxErr},
-    grammar::{
-        parse_program, RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr,
-    },
+    grammar::{parse_program, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr},
 };
 
 /// A struct that encapsulates a parallel demodularizer that eliminates "require" and "provide" in a raw AST.
@@ -245,7 +243,7 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         ),
         RawExpr::Var(v) => RawExpr::Var(mangle_sym(v, source, no_mangle)),
 
-        RawExpr::Apply(f, t, c, args) => RawExpr::Apply(
+        RawExpr::Apply(f, t, args) => RawExpr::Apply(
             recurse(f),
             t.into_iter()
                 .map(|(k, v)| {
@@ -255,20 +253,13 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
                     )
                 })
                 .collect(),
-            c,
             args.into_iter().map(recurse).collect(),
         ),
         RawExpr::Field(a, b) => RawExpr::Field(recurse(a), b),
         RawExpr::VectorRef(v, i) => RawExpr::VectorRef(recurse(v), recurse(i)),
         RawExpr::VectorSlice(v, i, j) => RawExpr::VectorSlice(recurse(v), recurse(i), recurse(j)),
         RawExpr::VectorUpdate(v, i, x) => RawExpr::VectorUpdate(recurse(v), recurse(i), recurse(x)),
-        RawExpr::Loop(n, bod, end) => RawExpr::Loop(
-            mangle_const_expr(n, source, no_mangle),
-            bod.into_iter()
-                .map(|(k, v)| (mangle_sym(k, source, no_mangle), recurse(v)))
-                .collect(),
-            recurse(end),
-        ),
+
         RawExpr::IsType(a, t) => RawExpr::IsType(
             mangle_sym(a, source, no_mangle),
             mangle_type_expr(t, source, no_mangle),
@@ -312,21 +303,6 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
     .with_ctx(ctx)
 }
 
-fn mangle_const_expr(
-    sym: Ctx<RawConstExpr>,
-    source: ModuleId,
-    no_mangle: &Set<Symbol>,
-) -> Ctx<RawConstExpr> {
-    let recurse = |sym| mangle_const_expr(sym, source, no_mangle);
-    match sym.deref().clone() {
-        RawConstExpr::Sym(s) => RawConstExpr::Sym(mangle_sym(s, source, no_mangle)),
-        RawConstExpr::Lit(l) => RawConstExpr::Lit(l),
-        RawConstExpr::Plus(a, b) => RawConstExpr::Plus(recurse(a), recurse(b)),
-        RawConstExpr::Mult(a, b) => RawConstExpr::Mult(recurse(a), recurse(b)),
-    }
-    .with_ctx(sym.ctx())
-}
-
 fn mangle_ctx_sym(sym: Ctx<Symbol>, source: ModuleId, no_mangle: &Set<Symbol>) -> Ctx<Symbol> {
     mangle_sym(*sym, source, no_mangle).with_ctx(sym.ctx())
 }
@@ -353,15 +329,9 @@ fn mangle_type_expr(
         RawTypeExpr::Sym(s) => RawTypeExpr::Sym(mangle_sym(s, source, no_mangle)),
         RawTypeExpr::Union(a, b) => RawTypeExpr::Union(recurse(a), recurse(b)),
         RawTypeExpr::Vector(v) => RawTypeExpr::Vector(v.into_iter().map(recurse).collect()),
-        RawTypeExpr::Vectorof(v, n) => {
-            RawTypeExpr::Vectorof(recurse(v), mangle_const_expr(n, source, no_mangle))
-        }
-        RawTypeExpr::NatRange(i, j) => RawTypeExpr::NatRange(
-            mangle_const_expr(i, source, no_mangle),
-            mangle_const_expr(j, source, no_mangle),
-        ),
+
         RawTypeExpr::DynVectorof(v) => RawTypeExpr::DynVectorof(recurse(v)),
-        RawTypeExpr::Bytes(n) => RawTypeExpr::Bytes(mangle_const_expr(n, source, no_mangle)),
+
         RawTypeExpr::DynBytes => RawTypeExpr::DynBytes,
     }
     .with_ctx(bind.ctx())

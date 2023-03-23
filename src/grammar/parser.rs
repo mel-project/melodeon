@@ -13,7 +13,7 @@ use crate::{
     grammar::{BinOp, UniOp},
 };
 
-use super::{RawConstExpr, RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr};
+use super::{RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr};
 
 /// Parse a string as an entire program.
 pub fn parse_program(input: &str, source: ModuleId, root: &Path) -> CtxResult<Ctx<RawProgram>> {
@@ -200,71 +200,16 @@ fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
                 .collect(),
         )
         .with_ctx(ctx),
-        Rule::type_vectorof => {
-            let mut children = pair.into_inner();
-            let inner_type = parse_type_expr(children.next().unwrap(), source);
-            let length = parse_const_expr(children.next().unwrap(), source);
-            RawTypeExpr::Vectorof(inner_type, length).with_ctx(ctx)
-        }
+
         Rule::type_dynvectorof => {
             let mut children = pair.into_inner();
             let inner_type = parse_type_expr(children.next().unwrap(), source);
             RawTypeExpr::DynVectorof(inner_type).with_ctx(ctx)
         }
         Rule::type_name => RawTypeExpr::Sym(Symbol::from(pair.as_str())).with_ctx(ctx),
-        Rule::type_natrange => {
-            let mut children = pair.into_inner();
-            let left = parse_const_expr(children.next().unwrap(), source);
-            let right = children
-                .next()
-                .map(|c| parse_const_expr(c, source))
-                .unwrap_or_else(|| left.clone());
-            RawTypeExpr::NatRange(left, right).with_ctx(ctx)
-        }
-        Rule::type_bytes => {
-            let inner = parse_const_expr(pair.into_inner().next().unwrap(), source);
-            RawTypeExpr::Bytes(inner).with_ctx(ctx)
-        }
-        Rule::type_dynbytes => RawTypeExpr::DynBytes.with_ctx(ctx),
-        Rule::type_qmark => {
-            let mut children = pair.into_inner();
-            let inner_type = parse_type_expr(children.next().unwrap(), source);
-            RawTypeExpr::Union(
-                RawTypeExpr::NatRange(
-                    RawConstExpr::Lit(U256::from(0u8)).into(),
-                    RawConstExpr::Lit(U256::from(0u8)).into(),
-                )
-                .into(),
-                inner_type,
-            )
-            .with_ctx(ctx)
-        }
-        _ => unreachable!(),
-    }
-}
 
-fn parse_const_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawConstExpr> {
-    let ctx = p2ctx(&pair, source);
-    match pair.as_rule() {
-        Rule::const_add_expr | Rule::const_mult_expr => {
-            let mut children = pair.into_inner();
-            let mut head = parse_const_expr(children.next().unwrap(), source);
-            while let Some(op) = children.next() {
-                let arg = parse_const_expr(children.next().unwrap(), source);
-                head = match op.as_rule() {
-                    Rule::add => RawConstExpr::Plus(head, arg),
-                    Rule::mul => RawConstExpr::Mult(head, arg),
-                    _ => unreachable!(),
-                }
-                .with_ctx(ctx)
-            }
-            head
-        }
-        Rule::nat_literal => {
-            RawConstExpr::Lit(U256::from_str_radix(pair.as_str(), 10).unwrap_or_default())
-                .with_ctx(ctx)
-        }
-        Rule::cgvar_name => RawConstExpr::Sym(Symbol::from(pair.as_str())).with_ctx(ctx),
+        Rule::type_dynbytes => RawTypeExpr::DynBytes.with_ctx(ctx),
+
         _ => unreachable!(),
     }
 }
@@ -446,28 +391,15 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                         let arguments = child.into_inner();
                         let arguments: List<Ctx<RawExpr>> =
                             arguments.map(|a| parse_expr(a, source)).collect();
-                        toret = RawExpr::Apply(
-                            toret,
-                            Default::default(),
-                            Default::default(),
-                            arguments,
-                        )
-                        .with_ctx(ctx);
+                        toret = RawExpr::Apply(toret, Default::default(), arguments).with_ctx(ctx);
                     }
                     Rule::tfish_call_args => {
                         let inner = child.into_inner().collect::<Vec<_>>();
                         assert!(!inner.is_empty());
-                        let mut cgvar_map = Map::new();
+
                         let mut tvar_map = Map::new();
                         for child in inner.iter() {
                             match child.as_rule() {
-                                Rule::tfish_cgvar => {
-                                    let cc = child.clone().into_inner().collect::<Vec<_>>();
-                                    cgvar_map.insert(
-                                        Symbol::from(cc[0].as_str()),
-                                        parse_const_expr(cc[1].clone(), source),
-                                    );
-                                }
                                 Rule::tfish_type => {
                                     let cc = child.clone().into_inner().collect::<Vec<_>>();
                                     tvar_map.insert(
@@ -481,7 +413,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                         let arguments = inner.last().unwrap().clone().into_inner();
                         let arguments: List<Ctx<RawExpr>> =
                             arguments.map(|a| parse_expr(a, source)).collect();
-                        toret = RawExpr::Apply(toret, tvar_map, cgvar_map, arguments).with_ctx(ctx)
+                        toret = RawExpr::Apply(toret, tvar_map, arguments).with_ctx(ctx)
                     }
                     Rule::field_access => {
                         let field_name = child.into_inner().next().unwrap();
@@ -572,24 +504,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             }
             RawExpr::LitStruct(name, bindings).with_ctx(ctx)
         }
-        Rule::loop_expr => {
-            let mut children: VecDeque<_> = pair.into_inner().collect();
-            let iterations = parse_const_expr(children.pop_front().unwrap(), source);
-            let end_with = parse_expr(children.pop_back().unwrap(), source);
-            let inner: List<_> = children
-                .into_iter()
-                .map(|c| parse_setbang(c, source))
-                .collect();
-            /*
-            let free_vars = inner.iter().map(|(sym, val)| val.free_variables());
 
-            RawExpr::Let(
-                free_vars.into_iter().map(|sym| (sym, sym)).collect(),
-                RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx),
-            ).with_ctx(ctx)
-            */
-            RawExpr::Loop(iterations, inner, end_with).with_ctx(ctx)
-        }
         Rule::string_literal => {
             let true_repr = snailquote::unescape(pair.as_str()).unwrap();
             RawExpr::LitBytes(Bytes::copy_from_slice(true_repr.as_bytes())).with_ctx(ctx)

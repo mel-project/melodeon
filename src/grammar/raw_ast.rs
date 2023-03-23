@@ -49,20 +49,8 @@ pub enum RawTypeExpr {
     Sym(Symbol),
     Union(Ctx<Self>, Ctx<Self>),
     Vector(List<Ctx<Self>>),
-    Vectorof(Ctx<Self>, Ctx<RawConstExpr>),
     DynVectorof(Ctx<Self>),
-    Bytes(Ctx<RawConstExpr>),
     DynBytes,
-    NatRange(Ctx<RawConstExpr>, Ctx<RawConstExpr>),
-}
-
-/// A raw constant expression.
-#[derive(Clone, Debug)]
-pub enum RawConstExpr {
-    Sym(Symbol),
-    Lit(U256),
-    Plus(Ctx<Self>, Ctx<Self>),
-    Mult(Ctx<Self>, Ctx<Self>),
 }
 
 /// A raw expression.
@@ -84,19 +72,12 @@ pub enum RawExpr {
     LitStruct(Symbol, Map<Symbol, Ctx<RawExpr>>),
     Var(Symbol),
 
-    Apply(
-        Ctx<Self>,
-        Map<Symbol, Ctx<RawTypeExpr>>,
-        Map<Symbol, Ctx<RawConstExpr>>,
-        List<Ctx<Self>>,
-    ),
+    Apply(Ctx<Self>, Map<Symbol, Ctx<RawTypeExpr>>, List<Ctx<Self>>),
 
     Field(Ctx<Self>, Ctx<Symbol>),
     VectorRef(Ctx<Self>, Ctx<Self>),
     VectorSlice(Ctx<Self>, Ctx<Self>, Ctx<Self>),
     VectorUpdate(Ctx<Self>, Ctx<Self>, Ctx<Self>),
-
-    Loop(Ctx<RawConstExpr>, List<(Symbol, Ctx<Self>)>, Ctx<Self>),
 
     IsType(Symbol, Ctx<RawTypeExpr>),
     AsType(Ctx<Self>, Ctx<RawTypeExpr>),
@@ -248,10 +229,9 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
         }
         RawTypeExpr::Union(l, r) => rec(l).union(rec(r)),
         RawTypeExpr::Vector(l) => l.iter().fold(Set::new(), |acc, t| acc.union(rec(t))),
-        RawTypeExpr::Vectorof(t, _) => rec(t),
-        RawTypeExpr::NatRange(_, _) => Set::new(),
+
         RawTypeExpr::DynVectorof(v) => rec(v),
-        RawTypeExpr::Bytes(_) => Set::new(),
+
         RawTypeExpr::DynBytes => Set::new(),
     }
 }
@@ -282,7 +262,7 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
                 |acc, var| acc.without(var),
             )
         }
-        RawExpr::Apply(fn_name, _, _, args) => args
+        RawExpr::Apply(fn_name, _, args) => args
             .iter()
             .fold(rec(fn_name), |acc, arg| acc.union(rec(arg))),
         RawExpr::LitStruct(s_name, fields) => fields
@@ -308,11 +288,7 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
             .without(avar),
         RawExpr::Fail => Set::new(),
         RawExpr::LitNum(_) => Set::new(),
-        RawExpr::Loop(_, body, inner) => body
-            .iter()
-            .map(|a| rec(&a.1))
-            .fold(Set::new(), |a, b| a.union(b))
-            .union(rec(inner)),
+
         RawExpr::IsType(v, t) => Set::unit(*v).union(typebind_parents(t)),
         RawExpr::AsType(a, t) | RawExpr::Transmute(a, t) => rec(a).union(typebind_parents(t)),
         RawExpr::LitBytes(_) => Set::new(),

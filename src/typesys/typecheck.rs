@@ -9,7 +9,7 @@ use tap::Tap;
 use crate::{
     containers::{List, Map, Set, Symbol, Void},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
-    grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
+    grammar::{sort_defs, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program, UniOp},
     typesys::{Type, Variable},
 };
@@ -508,7 +508,7 @@ pub fn typecheck_expr<Tv: Variable>(
                 TypeFacts::empty(),
             ))
         }
-        RawExpr::Apply(f, tvars, cgvars, args) => {
+        RawExpr::Apply(f, tvars, args) => {
             if let RawExpr::Var(f) = f.deref() {
                 let ftype = state
                     .lookup_fun(*f)
@@ -750,9 +750,6 @@ pub fn typecheck_expr<Tv: Variable>(
             }
         }
 
-        RawExpr::Loop(iterations, body, end) => {
-            todo!()
-        }
         RawExpr::Fail => Ok((
             Expr {
                 inner: ExprInner::Fail,
@@ -875,17 +872,12 @@ fn typecheck_type_expr<Tv: Variable>(
                 .collect();
             Ok(Type::Vector(processed_tt?))
         }
-        RawTypeExpr::Vectorof(t, n) => {
-            todo!()
-        }
-        RawTypeExpr::NatRange(a, b) => {
-            todo!()
-        }
+
         RawTypeExpr::DynVectorof(v) => {
             let v = typecheck_type_expr(state, v)?;
             Ok(Type::DynVectorof(v.into()))
         }
-        RawTypeExpr::Bytes(c) => todo!(),
+
         RawTypeExpr::DynBytes => Ok(Type::DynBytes),
     }
 }

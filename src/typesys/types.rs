@@ -153,13 +153,9 @@ impl<TVar: Variable> Type<TVar> {
             (Type::DynBytes, Type::DynBytes) => true,
             (Type::DynBytes, Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
             (Type::DynBytes, _) => false,
-            (Type::Nat, Type::Nothing) => todo!(),
-            (Type::Nat, Type::Var(_)) => todo!(),
-            (Type::Nat, Type::Nat) => todo!(),
-            (Type::Nat, Type::Vector(_)) => todo!(),
-            (Type::Nat, Type::DynVectorof(_)) => todo!(),
-            (Type::Nat, Type::DynBytes) => todo!(),
-            (Type::Nat, Type::Union(_, _)) => todo!(),
+            (Type::Nat, Type::Nat) => true,
+            (Type::Nat, Type::Union(a, b)) => self.subtype_of(a) || self.subtype_of(b),
+            (Type::Nat, _) => false,
         }
     }
 
