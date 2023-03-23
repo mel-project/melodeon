@@ -161,15 +161,13 @@ fn mangle(defs: List<Ctx<RawDefn>>, source: ModuleId) -> List<Ctx<RawDefn>> {
             match defn.deref().clone() {
                 RawDefn::Function {
                     name,
-                    cgvars,
                     genvars,
                     args,
                     rettype,
                     body,
                 } => {
-                    let inner_nomangle = cgvars
+                    let inner_nomangle = genvars
                         .iter()
-                        .chain(genvars.iter())
                         .map(|a| **a)
                         .chain(args.iter().map(|a| *a.name))
                         .fold(no_mangle.clone(), |mut acc, s| {
@@ -178,7 +176,7 @@ fn mangle(defs: List<Ctx<RawDefn>>, source: ModuleId) -> List<Ctx<RawDefn>> {
                         });
                     Some(RawDefn::Function {
                         name: mangle_ctx_sym(name, source, &no_mangle),
-                        cgvars,
+
                         genvars,
                         args: args
                             .into_iter()
@@ -246,7 +244,7 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
             fields.into_iter().map(|(k, b)| (k, recurse(b))).collect(),
         ),
         RawExpr::Var(v) => RawExpr::Var(mangle_sym(v, source, no_mangle)),
-        RawExpr::CgVar(v) => RawExpr::CgVar(mangle_sym(v, source, no_mangle)),
+
         RawExpr::Apply(f, t, c, args) => RawExpr::Apply(
             recurse(f),
             t.into_iter()

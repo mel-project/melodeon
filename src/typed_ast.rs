@@ -5,7 +5,7 @@ use ethnum::U256;
 
 use crate::containers::{List, Map, Symbol, Void};
 
-use crate::typesys::{ConstExpr, Type, Variable};
+use crate::typesys::{Type, Variable};
 
 #[derive(Debug, Clone)]
 pub struct Program {
@@ -14,20 +14,20 @@ pub struct Program {
 }
 
 #[derive(Debug, Clone)]
-pub struct FunDefn<TVar: Variable = Void, CVar: Variable = Void> {
+pub struct FunDefn<TVar: Variable = Void> {
     pub name: Symbol,
     pub args: List<Symbol>,
-    pub body: Expr<TVar, CVar>,
+    pub body: Expr<TVar>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Expr<TVar: Variable = Void, CVar: Variable = Void> {
-    pub itype: Type<TVar, CVar>,
-    pub inner: ExprInner<TVar, CVar>,
+pub struct Expr<TVar: Variable = Void> {
+    pub itype: Type<TVar>,
+    pub inner: ExprInner<TVar>,
 }
 
-impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
-    pub fn new(itype: Type<TVar, CVar>, inner: ExprInner<TVar, CVar>) -> Self {
+impl<TVar: Variable> Expr<TVar> {
+    pub fn new(itype: Type<TVar>, inner: ExprInner<TVar>) -> Self {
         Self { itype, inner }
     }
 
@@ -45,12 +45,9 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
                 recurse(i).into(),
             ),
             ExprInner::Apply(f, args) => ExprInner::Apply(*f, args.iter().map(recurse).collect()),
-            ExprInner::ApplyGeneric(f, tg, cg, args) => ExprInner::ApplyGeneric(
-                *f,
-                tg.clone(),
-                cg.clone(),
-                args.iter().map(recurse).collect(),
-            ),
+            ExprInner::ApplyGeneric(f, tg, args) => {
+                ExprInner::ApplyGeneric(*f, tg.clone(), args.iter().map(recurse).collect())
+            }
             ExprInner::VectorRef(v, i) => {
                 ExprInner::VectorRef(recurse(v).into(), recurse(i).into())
             }
@@ -76,60 +73,35 @@ impl<TVar: Variable, CVar: Variable> Expr<TVar, CVar> {
 }
 
 #[derive(Debug, Clone)]
-pub enum ExprInner<TVar: Variable, CVar: Variable> {
-    BinOp(BinOp, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
-    UniOp(UniOp, Arc<Expr<TVar, CVar>>),
+pub enum ExprInner<TVar: Variable> {
+    BinOp(BinOp, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
+    UniOp(UniOp, Arc<Expr<TVar>>),
     /// The first one is an **upper bound** for how big the exponent is
-    Exp(
-        ConstExpr<CVar>,
-        Arc<Expr<TVar, CVar>>,
-        Arc<Expr<TVar, CVar>>,
-    ),
-    If(
-        Arc<Expr<TVar, CVar>>,
-        Arc<Expr<TVar, CVar>>,
-        Arc<Expr<TVar, CVar>>,
-    ),
+    Exp(U256, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
+    If(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
     //Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
-    Let(List<(Symbol, Arc<Expr<TVar, CVar>>)>, Arc<Expr<TVar, CVar>>),
-    Apply(Symbol, List<Expr<TVar, CVar>>),
-    ExternApply(String, List<Expr<TVar, CVar>>),
+    Let(List<(Symbol, Arc<Expr<TVar>>)>, Arc<Expr<TVar>>),
+    Apply(Symbol, List<Expr<TVar>>),
+    ExternApply(String, List<Expr<TVar>>),
     Extern(String),
-    ApplyGeneric(
-        Symbol,
-        Map<TVar, Type<TVar, CVar>>,
-        Map<CVar, ConstExpr<CVar>>,
-        List<Expr<TVar, CVar>>,
-    ),
+    ApplyGeneric(Symbol, Map<TVar, Type<TVar>>, List<Expr<TVar>>),
     LitNum(U256),
     LitBytes(Bytes),
-    LitBVec(List<Expr<TVar, CVar>>),
-    LitVec(List<Expr<TVar, CVar>>),
-    LitConst(ConstExpr<CVar>),
+    LitBVec(List<Expr<TVar>>),
+    LitVec(List<Expr<TVar>>),
+    LitConst(U256),
     Var(Symbol),
-    IsType(Symbol, Type<TVar, CVar>),
-    VectorRef(Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
-    VectorUpdate(
-        Arc<Expr<TVar, CVar>>,
-        Arc<Expr<TVar, CVar>>,
-        Arc<Expr<TVar, CVar>>,
-    ),
-    VectorSlice(
-        Arc<Expr<TVar, CVar>>,
-        Arc<Expr<TVar, CVar>>,
-        Arc<Expr<TVar, CVar>>,
-    ),
-    Loop(
-        ConstExpr<CVar>,
-        List<(Symbol, Expr<TVar, CVar>)>,
-        Arc<Expr<TVar, CVar>>,
-    ),
+    IsType(Symbol, Type<TVar>),
+    VectorRef(Arc<Expr<TVar>>, Arc<Expr<TVar>>),
+    VectorUpdate(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
+    VectorSlice(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
+    Loop(U256, List<(Symbol, Expr<TVar>)>, Arc<Expr<TVar>>),
     Fail,
 }
 
-impl<TVar: Variable, CVar: Variable> ExprInner<TVar, CVar> {
+impl<TVar: Variable> ExprInner<TVar> {
     /// Convenience type to wrap in an Expr with the any type
-    pub fn wrap_any(self) -> Expr<TVar, CVar> {
+    pub fn wrap_any(self) -> Expr<TVar> {
         Expr {
             inner: self,
             itype: Type::Any,
@@ -137,7 +109,7 @@ impl<TVar: Variable, CVar: Variable> ExprInner<TVar, CVar> {
     }
 
     /// Convenience type to wrap in an Expr with the given type
-    pub fn wrap(self, t: Type<TVar, CVar>) -> Expr<TVar, CVar> {
+    pub fn wrap(self, t: Type<TVar>) -> Expr<TVar> {
         Expr {
             inner: self,
             itype: t,

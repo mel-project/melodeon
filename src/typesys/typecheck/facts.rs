@@ -7,11 +7,11 @@ use super::state::TypecheckState;
 
 /// A carrier of information gleaned about the types of variables through occurrence-typing operators (`is` and such).
 #[derive(Clone, Debug)]
-pub struct TypeFacts<Tv: Variable, Cv: Variable> {
-    mapping: Map<Symbol, Type<Tv, Cv>>,
+pub struct TypeFacts<Tv: Variable> {
+    mapping: Map<Symbol, Type<Tv>>,
 }
 
-impl<Tv: Variable, Cv: Variable> TypeFacts<Tv, Cv> {
+impl<Tv: Variable> TypeFacts<Tv> {
     /// Creates a new empty set.
     pub fn empty() -> Self {
         Self {
@@ -20,7 +20,7 @@ impl<Tv: Variable, Cv: Variable> TypeFacts<Tv, Cv> {
     }
 
     /// Adds a mapping to the type facts. If a mapping already exists, replaces it.
-    pub fn with_mapping(mut self, sym: Symbol, t: Type<Tv, Cv>) -> Self {
+    pub fn with_mapping(mut self, sym: Symbol, t: Type<Tv>) -> Self {
         self.mapping.insert(sym, t);
         self
     }
@@ -47,7 +47,7 @@ impl<Tv: Variable, Cv: Variable> TypeFacts<Tv, Cv> {
     }
 
     /// Negates the type facts, with respect to some type state.
-    pub fn negate_against(mut self, universe: &TypecheckState<Tv, Cv>) -> Self {
+    pub fn negate_against(mut self, universe: &TypecheckState<Tv>) -> Self {
         let _pre = self.clone();
         self.mapping.iter_mut().for_each(|(k, b)| {
             if let Some(u) = universe.lookup_var(*k) {
@@ -59,7 +59,7 @@ impl<Tv: Variable, Cv: Variable> TypeFacts<Tv, Cv> {
     }
 
     /// Iterates through the bindings
-    pub fn iter(&self) -> impl Iterator<Item = (&Symbol, &Type<Tv, Cv>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Symbol, &Type<Tv>)> {
         self.mapping.iter()
     }
 }

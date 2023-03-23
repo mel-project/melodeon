@@ -11,10 +11,7 @@ use crate::{
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{sort_defs, RawConstExpr, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program, UniOp},
-    typesys::{
-        typecheck::fold::{cgify_all_slots, partially_erase_cg, solve_recurrence},
-        ConstExpr, Type, Variable,
-    },
+    typesys::{Type, Variable},
 };
 
 use self::{
@@ -23,7 +20,7 @@ use self::{
 };
 
 mod facts;
-mod fold;
+
 mod state;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -62,10 +59,10 @@ impl Variable for i32 {
     }
 }
 
-fn assert_subtype<Tv: Variable, Cv: Variable>(
+fn assert_subtype<Tv: Variable>(
     ctx: Option<CtxLocation>,
-    a: &Type<Tv, Cv>,
-    b: &Type<Tv, Cv>,
+    a: &Type<Tv>,
+    b: &Type<Tv>,
 ) -> CtxResult<()> {
     if !a.subtype_of(b) {
         Err(anyhow::anyhow!("expected a subtype of {:?}, got {:?} instead", b, a).with_ctx(ctx))
@@ -95,26 +92,23 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
 
     // build the typecheck state
     let mut state = TypecheckState::new();
-    let mut fun_defs: List<FunDefn<TypeParam, CgParam>> = List::new();
+    let mut fun_defs: List<FunDefn<TypeParam>> = List::new();
     //for definition in raw.definitions.iter() {
     for definition in sorted.iter() {
         match definition.deref() {
             crate::grammar::RawDefn::Function {
                 name,
-                cgvars,
                 genvars,
                 args,
                 rettype,
                 body,
             } => {
                 // bind the type variables, then the CG-variables
-                let istate: TypecheckState<TypeParam, CgParam> =
+                let istate: TypecheckState<TypeParam> =
                     genvars.iter().fold(state.clone(), |state, sym| {
                         state.bind_type_alias(**sym, Type::Var(TypeParam(**sym)))
                     });
-                let istate = cgvars.iter().fold(istate, |state, sym| {
-                    state.bind_cgvar(**sym, ConstExpr::Var(CgParam(**sym)))
-                });
+
                 // now also bind the argument types
                 let state_no_args = istate.clone();
                 let istate = args.iter().fold(Ok::<_, CtxErr>(istate), |state, arg| {
@@ -141,7 +135,6 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                     body.itype.clone()
                 };
                 let fun_info = FunctionType {
-                    free_cgvars: cgvars.iter().map(|c| CgParam(**c)).collect(),
                     free_vars: genvars.iter().map(|c| TypeParam(**c)).collect(),
                     args: args
                         .iter()
@@ -202,15 +195,15 @@ pub fn typecheck_bindings<Tv: Variable, Cv: Variable>(binds: Vec<(Ctx<Symbol>, C
 */
 
 /// Typechecks a single expression, returning a single typed ast node.
-pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
-    state: TypecheckState<Tv, Cv>,
+pub fn typecheck_expr<Tv: Variable>(
+    state: TypecheckState<Tv>,
     raw: Ctx<RawExpr>,
-) -> CtxResult<(Expr<Tv, Cv>, TypeFacts<Tv, Cv>)> {
+) -> CtxResult<(Expr<Tv>, TypeFacts<Tv>)> {
     let recurse = |c| typecheck_expr(state.clone(), c);
     let ctx = raw.ctx();
     match raw.deref().clone() {
         RawExpr::Let(binds, body) => {
-            let mut checked_binds: List<(Symbol, Expr<Tv, Cv>)> = List::new();
+            let mut checked_binds: List<(Symbol, Expr<Tv>)> = List::new();
             let mut final_state = state.clone();
             for (var, val) in binds.into_iter() {
                 let checked_val = typecheck_expr(final_state.clone(), val)?;
@@ -271,60 +264,28 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             let check_nats = || {
                 let a_expr = a_expr.as_ref().map_err(|e| e.clone())?;
                 let b_expr = b_expr.as_ref().map_err(|e| e.clone())?;
-                assert_subtype(ctx, &a_expr.itype, &Type::all_nat())?;
-                assert_subtype(ctx, &b_expr.itype, &Type::all_nat())?;
-                let template: Type<Void, i32> =
-                    Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
-                let mut a_range = template.unify_cvars(&a_expr.itype).unwrap();
-                let mut b_range = template.unify_cvars(&b_expr.itype).unwrap();
+                assert_subtype(ctx, &a_expr.itype, &Type::Nat)?;
+                assert_subtype(ctx, &b_expr.itype, &Type::Nat)?;
 
-                // TODO figure out why this happens at all
-                if !a_range.contains_key(&0) || !a_range.contains_key(&1) {
-                    a_range.insert(0, ConstExpr::Lit(U256::ZERO));
-                    a_range.insert(1, ConstExpr::Lit(U256::MAX));
-                }
-                if !b_range.contains_key(&0) || !b_range.contains_key(&1) {
-                    b_range.insert(0, ConstExpr::Lit(U256::ZERO));
-                    b_range.insert(1, ConstExpr::Lit(U256::MAX));
-                }
-
-                Ok::<_, CtxErr>((a_range, b_range))
+                Ok::<_, CtxErr>(())
             };
             match op {
                 crate::grammar::BinOp::Add => {
-                    let (a_range, b_range) = check_nats()?;
-                    if a_range.len() == 2 && b_range.len() == 2 {
-                        log::trace!("a_range = {:?}, b_range = {:?}", a_range, b_range);
-                        // add the two ranges
-                        let lower_bound =
-                            ConstExpr::Add(a_range[&0].clone().into(), b_range[&0].clone().into())
-                                .simplify();
-                        let upper_bound =
-                            ConstExpr::Add(a_range[&1].clone().into(), b_range[&1].clone().into())
-                                .simplify();
-                        Ok((
-                            Expr {
-                                itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
-                                inner: ExprInner::BinOp(BinOp::Add, a_expr?.into(), b_expr?.into()),
-                            },
-                            TypeFacts::empty(),
-                        ))
-                    } else {
-                        Ok((
-                            Expr {
-                                itype: Type::all_nat(),
-                                inner: ExprInner::BinOp(BinOp::Add, a_expr?.into(), b_expr?.into()),
-                            },
-                            TypeFacts::empty(),
-                        ))
-                    }
+                    check_nats()?;
+                    Ok((
+                        Expr {
+                            itype: Type::Nat,
+                            inner: ExprInner::BinOp(BinOp::Add, a_expr?.into(), b_expr?.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
                 }
                 crate::grammar::BinOp::Sub => {
                     check_nats()?;
                     // cannot subtract CGs correctly at the moment
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Sub, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -336,28 +297,17 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     // cannot subtract CGs correctly at the moment
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
-                            inner: ExprInner::Exp(
-                                ConstExpr::Lit(U256::MAX),
-                                a_expr?.into(),
-                                b_expr?.into(),
-                            ),
+                            itype: Type::Nat,
+                            inner: ExprInner::Exp(U256::MAX, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
                     ))
                 }
                 crate::grammar::BinOp::Mul => {
-                    let (a_range, b_range) = check_nats()?;
-                    // add the two ranges
-                    let lower_bound =
-                        ConstExpr::Mul(a_range[&0].clone().into(), b_range[&0].clone().into())
-                            .simplify();
-                    let upper_bound =
-                        ConstExpr::Mul(a_range[&1].clone().into(), b_range[&1].clone().into())
-                            .simplify();
+                    check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::NatRange(lower_bound, upper_bound).fix_natrange(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Mul, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -368,7 +318,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Div, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -378,7 +328,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Mod, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -388,7 +338,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::NatRange(0u32.into(), 1u32.into()),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Eq, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -398,7 +348,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::NatRange(0u32.into(), 1u32.into()),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Lt, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -408,7 +358,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::NatRange(0u32.into(), 1u32.into()),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Le, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -418,7 +368,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::NatRange(0u32.into(), 1u32.into()),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Gt, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -428,7 +378,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::NatRange(0u32.into(), 1u32.into()),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Ge, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -438,20 +388,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     // vector append
                     let a_expr = a_expr?;
                     let b_expr = b_expr?;
-                    Ok((
-                        Expr {
-                            itype: a_expr
-                                .itype
-                                .append(&b_expr.itype)
-                                .context(format!(
-                                    "cannot append values of types {:?} and {:?}",
-                                    a_expr.itype, b_expr.itype
-                                ))
-                                .err_ctx(ctx)?,
-                            inner: ExprInner::BinOp(BinOp::Append, a_expr.into(), b_expr.into()),
-                        },
-                        TypeFacts::empty(),
-                    ))
+                    todo!()
                 }
                 crate::grammar::BinOp::Lor => {
                     // Desugar!
@@ -469,7 +406,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Lshift, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -479,7 +416,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Rshift, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -489,7 +426,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Bor, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -499,7 +436,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Band, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -509,7 +446,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     check_nats()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::BinOp(BinOp::Bxor, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -524,18 +461,15 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             // expr must be a number
             let check_nat = || {
                 let a_expr = a_expr.as_ref().map_err(|e| e.clone())?;
-                assert_subtype(ctx, &a_expr.itype, &Type::all_nat())?;
-                let template: Type<Void, i32> =
-                    Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
-                let a_range = template.unify_cvars(&a_expr.itype).unwrap();
-                Ok::<_, CtxErr>(a_range)
+                assert_subtype(ctx, &a_expr.itype, &Type::Nat)?;
+                Ok::<_, CtxErr>(())
             };
             match op {
                 crate::grammar::UniOp::Bnot => {
                     check_nat()?;
                     Ok((
                         Expr {
-                            itype: Type::all_nat(),
+                            itype: Type::Nat,
                             inner: ExprInner::UniOp(UniOp::Bnot, a_expr?.into()),
                         },
                         TypeFacts::empty(),
@@ -554,7 +488,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
         }
         RawExpr::LitNum(num) => Ok((
             Expr {
-                itype: Type::NatRange(num.into(), num.into()),
+                itype: Type::Nat,
                 inner: ExprInner::LitNum(num),
             },
             TypeFacts::empty(),
@@ -565,17 +499,13 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .context("undefined variable")
                 .err_ctx(ctx)?;
             // Here we at least know that the variable is *NOT* false if expression is true.
+            // TODO impl this
             Ok((
                 Expr {
                     itype: itype.clone(),
                     inner: ExprInner::Var(v),
                 },
-                TypeFacts::empty().with_mapping(
-                    v,
-                    itype
-                        .subtract(&Type::NatRange(0u32.into(), 0u32.into()))
-                        .into_owned(),
-                ),
+                TypeFacts::empty(),
             ))
         }
         RawExpr::Apply(f, tvars, cgvars, args) => {
@@ -608,31 +538,17 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                         })
                         .reduce(|a, b| a.union_with(b, |a, b| a.smart_union(&b)))
                         .unwrap_or_default();
-                    let mut cg_mapping = ftype
-                        .args
-                        .iter()
-                        .zip(typechecked_args.iter())
-                        .map(|(arg_type, arg)| {
-                            let actual_arg_type = arg.itype.clone();
-                            arg_type.unify_cvars(&actual_arg_type).unwrap_or_default()
-                        })
-                        .reduce(|a, b| a.union_with(b, |a, _| a))
-                        .unwrap_or_default();
+
                     // override with the things in the explicit turbofish
                     for (k, v) in tvars {
                         let k = Tv::try_from_sym(k).expect("wtf");
                         let v = typecheck_type_expr(&state, v)?;
                         generic_mapping.insert(k, v);
                     }
-                    for (k, v) in cgvars {
-                        let k = Cv::try_from_sym(k).expect("wtf");
-                        let v = typecheck_const_expr(&state, v)?;
-                        cg_mapping.insert(k, v);
-                    }
+
                     for (arg, required_type) in typechecked_args.iter().zip(ftype.args.iter()) {
                         let required_type = required_type
                             .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())
-                            .and_then(|t| t.try_fill_cvars(|cv| cg_mapping.get(cv).cloned()))
                             .context(format!(
                                 "cannot fill type variables in argument type {:?}, given concrete {:?}",
                                 required_type,
@@ -653,21 +569,15 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                             itype: ftype
                                 .result
                                 .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())
-                                .and_then(|t| t.try_fill_cvars(|cv| cg_mapping.get(cv).cloned()))
                                 .context(format!(
                                     "cannot fill type variables in result type {:?}",
                                     ftype.result
                                 ))
                                 .err_ctx(ctx)?,
-                            inner: if generic_mapping.is_empty() && cg_mapping.is_empty() {
+                            inner: if generic_mapping.is_empty() {
                                 ExprInner::Apply(*f, typechecked_args)
                             } else {
-                                ExprInner::ApplyGeneric(
-                                    *f,
-                                    generic_mapping,
-                                    cg_mapping,
-                                    typechecked_args,
-                                )
+                                ExprInner::ApplyGeneric(*f, generic_mapping, typechecked_args)
                             },
                         },
                         TypeFacts::empty(),
@@ -695,7 +605,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                             inner: ExprInner::VectorRef(
                                 a.into(),
                                 Expr {
-                                    itype: Type::all_nat(),
+                                    itype: Type::Nat,
                                     inner: ExprInner::LitNum((idx as u64).into()),
                                 }
                                 .into(),
@@ -711,18 +621,19 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             )
         }
         RawExpr::VectorRef(v, i) => {
-            let (v, _) = recurse(v)?;
-            let (i, _) = recurse(i)?;
-            let restype = type_vector_ref(&v.itype, &i.itype)
-                .or_else(|_| type_bytes_ref(&v.itype, &i.itype))
-                .err_ctx(ctx)?;
-            Ok((
-                Expr {
-                    itype: restype,
-                    inner: ExprInner::VectorRef(v.into(), i.into()),
-                },
-                TypeFacts::empty(),
-            ))
+            todo!()
+            // let (v, _) = recurse(v)?;
+            // let (i, _) = recurse(i)?;
+            // let restype = type_vector_ref(&v.itype, &i.itype)
+            //     .or_else(|_| type_bytes_ref(&v.itype, &i.itype))
+            //     .err_ctx(ctx)?;
+            // Ok((
+            //     Expr {
+            //         itype: restype,
+            //         inner: ExprInner::VectorRef(v.into(), i.into()),
+            //     },
+            //     TypeFacts::empty(),
+            // ))
         }
         RawExpr::VectorUpdate(v, i, x) => {
             let (v, _) = recurse(v)?;
@@ -758,7 +669,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             // }
             Ok((
                 Expr {
-                    itype: Type::NatRange(0_i32.into(), 1_i32.into()),
+                    itype: Type::Nat,
                     inner: ExprInner::IsType(x, t.clone()),
                 },
                 TypeFacts::empty().with_mapping(x, t),
@@ -795,84 +706,9 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 TypeFacts::empty(),
             ))
         }
-        RawExpr::CgVar(cgv) => {
-            let maps_to = state
-                .lookup_cgvar(cgv)
-                .context(format!("undefined constant-generic variable {:?}", cgv))
-                .err_ctx(ctx)?;
-            Ok((
-                Expr {
-                    itype: Type::NatRange(maps_to.clone(), maps_to.clone()),
-                    inner: ExprInner::LitConst(maps_to),
-                },
-                TypeFacts::empty(),
-            ))
-        }
+
         RawExpr::VectorSlice(v, l, r) => {
-            // TODO: producing vectors with uncertain lengths
-            // TODO: special-case when v is a written-out vector and l and r are both constants
-            let v = recurse(v)?.0;
-            let v_length =
-                Type::<Void, Symbol>::Vectorof(Type::Any.into(), ConstExpr::Var(Symbol::from("n")))
-                    .unify_cvars(&v.itype)
-                    .and_then(|h| h.get(&Symbol::from("n")).cloned())
-                    .context(format!("type {:?} cannot be sliced into", &v.itype))?;
-            let l = recurse(l)?.0;
-            let r = recurse(r)?.0;
-            let l_num = Type::NatRange::<Void, Symbol>(
-                ConstExpr::Var(Symbol::from("a")),
-                ConstExpr::Var(Symbol::from("a")),
-            )
-            .unify_cvars(&l.itype)
-            .and_then(|h| h.get(&Symbol::from("a")).cloned());
-            let r_num = Type::NatRange::<Void, Symbol>(
-                ConstExpr::Var(Symbol::from("a")),
-                ConstExpr::Var(Symbol::from("a")),
-            )
-            .unify_cvars(&r.itype)
-            .and_then(|h| h.get(&Symbol::from("a")).cloned());
-            if let (Some(l_num), Some(r_num)) = (l_num, r_num) {
-                if !l_num.leq(&r_num) {
-                    Err(anyhow::anyhow!(
-                        "left bound of vector slice {:?} is bigger than right bound {:?}",
-                        l_num,
-                        r_num
-                    )
-                    .with_ctx(ctx))
-                } else if !r_num.leq(&v_length) {
-                    Err(anyhow::anyhow!(
-                        "right bound of vector slice {:?} is too big for vector of length {:?}",
-                        r_num,
-                        v_length
-                    )
-                    .with_ctx(ctx))
-                } else {
-                    let new_length = r_num
-                        .checked_sub(&l_num)
-                        .context(format!(
-                            "cannot subtract {:?} - {:?} to compute length of sliced vector",
-                            r_num, l_num
-                        ))
-                        .err_ctx(ctx)?;
-                    Ok((
-                        Expr {
-                            itype: Type::Vectorof(
-                                v.itype.index(None).unwrap().into_owned().into(),
-                                new_length,
-                            ),
-                            inner: ExprInner::VectorSlice(v.into(), l.into(), r.into()),
-                        },
-                        TypeFacts::empty(),
-                    ))
-                }
-            } else {
-                Err(anyhow::anyhow!(
-                    "cannot resolve slice indices (of types {:?} and {:?}) to single numbers",
-                    l.itype,
-                    r.itype
-                )
-                .with_ctx(ctx))
-            }
+            todo!()
         }
         RawExpr::LitStruct(name, fields) => {
             let stype = state
@@ -913,82 +749,9 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                 .with_ctx(ctx))
             }
         }
-        // RawExpr::Exp(a, b) => {
-        //     // TODO infer this from b
-        //     let k = ConstExpr::Lit(255_u32.into());
-        //     let a: std::sync::Arc<Expr<Tv, Cv>> = recurse(a)?.0.into();
-        //     let b = typecheck_const_expr(&state, b)?;
 
-        //     // Check that a is Nat
-        //     assert_subtype(ctx, &a.itype, &Type::all_nat())?;
-        //     /*
-        //     let template: Type<Void, i32> =
-        //         Type::NatRange(ConstExpr::Var(0), ConstExpr::Var(1));
-        //     let a_range = template.unify_cvars(&a_expr.itype).unwrap();
-        //     */
-
-        //     Ok((
-        //         Expr {
-        //             itype: a.itype.clone(),
-        //             inner: ExprInner::Exp(k, a, b),
-        //         },
-        //         TypeFacts::empty(),
-        //     ))
-        // }
         RawExpr::Loop(iterations, body, end) => {
-            let iterations = typecheck_const_expr(&state, iterations)?;
-            //let free_vars = body.iter().map(|(sym, val)| val.free_variables(state.var_scope()));
-            let var_scope = state.var_scope();
-            let free_vars = body.iter().fold(Set::new(), |acc, (sym, val)| {
-                acc.union(val.free_variables(&var_scope).update(*sym))
-            });
-
-            let body = body
-                .into_iter()
-                .map(|(s, v)| {
-                    let ctx = v.ctx();
-                    let v = recurse(v)?.0;
-                    let s_type = state
-                        .lookup_var(s)
-                        .context(format!("assigning to undefined variable {:?}", s))
-                        .err_ctx(ctx)?;
-                    if !v.itype.subtype_of(&s_type) {
-                        Err(anyhow::anyhow!("assigning value of incompatible type {:?} to variable {:?} of type {:?}", v.itype, s, s_type).with_ctx(ctx))
-                    } else {
-                        Ok((s, v))
-                    }
-                })
-                .collect::<CtxResult<List<_>>>()?;
-            let end = recurse(end)?.0;
-            Ok((
-                Expr {
-                    itype: end.itype.clone(),
-                    //inner: ExprInner::Loop(iterations, body, end.into()),
-                    inner: ExprInner::Let(
-                        free_vars
-                            .into_iter()
-                            .map(|sym| {
-                                (
-                                    sym,
-                                    Expr {
-                                        itype: state.lookup_var(sym).expect(
-                                            "Expected binding to be available, this is a bug.",
-                                        ),
-                                        inner: ExprInner::Var(sym),
-                                    }
-                                    .into(),
-                                )
-                            })
-                            .collect(),
-                        Expr {
-                            itype: end.itype.clone(),
-                            inner: ExprInner::Loop(iterations, body, end.into()),
-                        }
-                        .into(),
-                    ),
-                },
-                TypeFacts::empty(),
-            ))
+            todo!()
         }
         RawExpr::Fail => Ok((
             Expr {
@@ -998,94 +761,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             TypeFacts::empty(),
         )),
         RawExpr::For(sym, val, body) => {
-            let val = recurse(val)?.0;
-            let (val_inner_length, val_inner_type) = vector_info(&val).err_ctx(ctx)?;
-            log::debug!(
-                "recursing inside for expression while binding {:?}={:?}",
-                sym,
-                val_inner_type
-            );
-            let body = typecheck_expr(state.bind_var(*sym, val_inner_type.clone()), body)?.0;
-            let temp_counter = Symbol::generate("@for-counter");
-            let temp_result = Symbol::generate("@for-result");
-            let result_type = Type::Vectorof(body.itype.clone().into(), val_inner_length.clone());
-            // desugar into a loop
-            // let counter = 0 in
-            // let result = $val in
-            // loop $val_length
-            //   set! result = let $sym = result[counter] in result[counter => $body]
-            //   set! counter = counter + 1
-            // done with result
-            Ok((
-                Expr {
-                    inner: ExprInner::Let(
-                        [(
-                            temp_counter,
-                            ExprInner::LitNum(0u32.into()).wrap(Type::all_nat()).into(),
-                        )]
-                        .into(),
-                        ExprInner::Let(
-                            [(temp_result, val.clone().into())].into(),
-                            ExprInner::Loop(
-                                val_inner_length,
-                                [
-                                    (
-                                        temp_result,
-                                        ExprInner::Let(
-                                            [(
-                                                *sym,
-                                                ExprInner::VectorRef(
-                                                    ExprInner::Var(temp_result)
-                                                        .wrap(val.itype.clone())
-                                                        .into(),
-                                                    ExprInner::Var(temp_counter)
-                                                        .wrap(Type::all_nat())
-                                                        .into(),
-                                                )
-                                                .wrap(val_inner_type)
-                                                .into(),
-                                            )]
-                                            .into(),
-                                            ExprInner::VectorUpdate(
-                                                ExprInner::Var(temp_result).wrap(val.itype).into(),
-                                                ExprInner::Var(temp_counter)
-                                                    .wrap(Type::all_nat())
-                                                    .into(),
-                                                body.into(),
-                                            )
-                                            .wrap(result_type.clone())
-                                            .into(),
-                                        )
-                                        .wrap(result_type.clone()),
-                                    ),
-                                    (
-                                        temp_counter,
-                                        ExprInner::BinOp(
-                                            BinOp::Add,
-                                            ExprInner::Var(temp_counter)
-                                                .wrap(Type::all_nat())
-                                                .into(),
-                                            ExprInner::LitNum(1u32.into())
-                                                .wrap(Type::all_nat())
-                                                .into(),
-                                        )
-                                        .wrap(Type::all_nat()),
-                                    ),
-                                ]
-                                .into_iter()
-                                .collect(),
-                                ExprInner::Var(temp_result).wrap(result_type.clone()).into(),
-                            )
-                            .wrap(result_type.clone())
-                            .into(),
-                        )
-                        .wrap(result_type.clone())
-                        .into(),
-                    ),
-                    itype: result_type,
-                },
-                TypeFacts::empty(),
-            ))
+            todo!()
         }
         RawExpr::Transmute(inner, t) => {
             if state.lookup_safety() {
@@ -1098,185 +774,19 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
             }
         }
         RawExpr::ForFold(var_name, var_binding, accum_name, accum_binding, body) => {
-            // First, we try the "easy" case, where the body has, straightforwardly, the same type as the accum
-            let init_accum = recurse(accum_binding)?.0;
-            let iterating_list = recurse(var_binding)?.0;
-            let (list_length, list_inner_type) = vector_info(&iterating_list)?;
-            let body_easy_case = typecheck_expr(
-                state
-                    .clone()
-                    .bind_var(*var_name, list_inner_type.clone())
-                    .bind_var(*accum_name, init_accum.itype.clone()),
-                body.clone(),
-            )?
-            .0;
-            let loop_body: Expr<Tv, Cv>;
-            let result_type: Type<Tv, Cv>;
-            if body_easy_case.itype.subtype_of(&init_accum.itype) {
-                log::trace!("**EASY** case for folds");
-                loop_body = body_easy_case;
-                result_type = init_accum.itype.clone();
-            } else {
-                log::trace!("**HARD** case for folds");
-                // Then, the tricky, "inference" case. We "const-genericize" the accumulator, replacing every position where we *can* place a const-generic parameter with a const-generic parameter. For example, [Nat; 0] becomes [{$n..$m}; $q].
-                let new_cgvars = DashSet::new();
-                let init_accum_cgified = cgify_all_slots(&init_accum.itype, || {
-                    let v = Cv::try_from_sym(Symbol::generate("@g")).unwrap();
-                    new_cgvars.insert(v.clone());
-                    v
-                });
-                let cgification_mapping =
-                    init_accum_cgified.unify_cvars(&init_accum.itype).unwrap();
-                // Then, we typecheck the body, binding the accumulator variable to the const-genericized type above.
-                let cgified_body = typecheck_expr(
-                    state
-                        .bind_var(*var_name, list_inner_type.clone())
-                        .bind_var(*accum_name, init_accum_cgified.clone()),
-                    body,
-                )?
-                .0;
-                // We then unify the body with the const-genericized accumulator type. For example, we may get [{$n+1..$m+1}; $q+1]
-                let pre_post_mapping = init_accum_cgified.unify_cvars(&cgified_body.itype).context(format!("cannot unify pre-iteration accumulator type {:?} with post-iteration accumulator type {:?}", init_accum_cgified, cgified_body.itype))?;
-                log::trace!(
-                    "pre-iteration {:?}, post-iteration {:?}, mapping {:?}",
-                    init_accum_cgified,
-                    cgified_body.itype,
-                    pre_post_mapping
-                );
-                if !cgified_body
-                    .itype
-                    .subtype_of(&init_accum_cgified.fill_cvars(|c| {
-                        pre_post_mapping
-                            .get(c)
-                            .cloned()
-                            .unwrap_or_else(|| ConstExpr::Var(c.clone()))
-                    }))
-                {
-                    return Err(anyhow::anyhow!(
-                        "post-iteration type {:?} fundamentally incompatible wth pre-iteration type {:?}",
-                        cgified_body.itype,
-                        init_accum_cgified
-                    )
-                    .with_ctx(ctx));
-                }
-                let all_the_way_mapping = pre_post_mapping
-                    .into_iter()
-                    .map(|(k, v)| {
-                        Ok((
-                            k.clone(),
-                            solve_recurrence(
-                                cgification_mapping[&k].clone(),
-                                k,
-                                v,
-                                list_length.clone(),
-                            )
-                            .err_ctx(ctx)?,
-                        ))
-                    })
-                    .collect::<CtxResult<Map<_, _>>>()?;
-                // Each unification binding then lets us calculate the final type. Each binding is of the form
-                //    $n => (some expression that contains $n, say 2*$n+1)
-                // if the RHS contains any variable other than $n, we fail.
-                // The "diff" each time is then RHS - LHS. If this fails, we fail too.
-                let erased_body = cgified_body.recursive_map(|mut x| {
-                    x.itype = partially_erase_cg(&x.itype, |c| new_cgvars.contains(c));
-                    x
-                });
-                loop_body = erased_body;
-                result_type = init_accum_cgified.fill_cvars(|c| {
-                    if let Some(r) = all_the_way_mapping.get(c) {
-                        r.clone()
-                    } else {
-                        ConstExpr::Var(c.clone())
-                    }
-                });
-                log::trace!("result_type is {:?}", result_type);
-            }
-            // desugar into a loop
-            // let input = $val in
-            // let counter = 0 in
-            // let accum = $init_accum in
-            // loop $val_length
-            //   set! accum = let $sym = input[counter] in $body
-            //   set! counter = counter + 1
-            // done with accum
-            use ExprInner::*;
-            let temp_counter = Symbol::generate("@fold-counter");
-            let temp_input = Symbol::generate("@fold-input");
-            let loop_inner: List<(Symbol, Expr<Tv, Cv>)> = [
-                (
-                    *accum_name,
-                    ExprInner::Let(
-                        [(
-                            *var_name,
-                            ExprInner::VectorRef(
-                                ExprInner::Var(temp_input)
-                                    .wrap(iterating_list.itype.clone())
-                                    .into(),
-                                ExprInner::Var(temp_counter).wrap(Type::all_nat()).into(),
-                            )
-                            .wrap(list_inner_type)
-                            .into(),
-                        )]
-                        .into(),
-                        loop_body.into(),
-                    )
-                    .wrap_any(),
-                ),
-                (
-                    temp_counter,
-                    ExprInner::BinOp(
-                        crate::typed_ast::BinOp::Add,
-                        Var(temp_counter).wrap(Type::all_nat()).into(),
-                        LitNum(1u32.into()).wrap(Type::all_nat()).into(),
-                    )
-                    .wrap(Type::all_nat()),
-                ),
-            ]
-            .into_iter()
-            .collect();
-            Ok((
-                Let(
-                    [
-                        (temp_input, iterating_list.into()),
-                        //Let(
-                        (
-                            temp_counter,
-                            LitNum(0u32.into()).wrap(Type::all_nat()).into(),
-                        ),
-                        //Let(
-                        (*accum_name, init_accum.into()),
-                    ]
-                    .into(),
-                    Loop(
-                        list_length,
-                        loop_inner,
-                        Var(*accum_name).wrap(result_type.clone()).into(),
-                    )
-                    .wrap(result_type.clone())
-                    .into(),
-                )
-                .wrap(result_type),
-                TypeFacts::empty(),
-            ))
+            todo!()
         }
-        RawExpr::LitBytes(b) => {
-            let blen = b.len().into();
-            Ok((
-                ExprInner::LitBytes(b).wrap(Type::Bytes(blen)),
-                TypeFacts::empty(),
-            ))
-        }
+        RawExpr::LitBytes(b) => Ok((
+            ExprInner::LitBytes(b).wrap(Type::DynBytes),
+            TypeFacts::empty(),
+        )),
         RawExpr::LitBVec(vv) => {
             let args = vv
                 .into_iter()
                 .map(|arg| {
                     let ctx = arg.ctx();
                     let arg = recurse(arg)?.0;
-                    if !arg
-                        .itype
-                        .subtype_of(&Type::NatRange(0_i32.into(), 255_i32.into()))
-                    {
+                    if !arg.itype.subtype_of(&Type::Nat) {
                         Err(anyhow::anyhow!(
                             "element in bytes must be byte-valued, got {:?} instead",
                             arg.itype
@@ -1287,7 +797,7 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
                     }
                 })
                 .collect::<CtxResult<List<_>>>()?;
-            let itype = Type::Bytes(args.len().into());
+            let itype = Type::DynBytes;
             Ok((ExprInner::LitBVec(args).wrap(itype), TypeFacts::empty()))
         }
         RawExpr::Unsafe(s) => typecheck_expr(state.bind_safety(false), s),
@@ -1321,117 +831,29 @@ pub fn typecheck_expr<Tv: Variable, Cv: Variable>(
     }
 }
 
-fn vector_info<Tv: Variable, Cv: Variable>(
-    val: &Expr<Tv, Cv>,
-) -> anyhow::Result<(ConstExpr<Cv>, Type<Tv, Cv>)> {
-    let val_lengths = val.itype.lengths();
-    if val_lengths.len() == 1 {
-        Ok((
-            val_lengths.into_iter().next().unwrap(),
-            val.itype
-                .index(None)
-                .context(anyhow::anyhow!(
-                    "cannot do comprehension over the type {:?}",
-                    val.itype
-                ))?
-                .into_owned(),
-        ))
-    } else {
-        return Err(anyhow::anyhow!(
-            "list comprehension needs a list with a definite length, got {:?} instead",
-            val.itype
-        ));
-    }
+fn vector_info<Tv: Variable>(val: &Expr<Tv>) -> anyhow::Result<Type<Tv>> {
+    todo!()
 }
 
 fn type_bytes_ref<Tv: Variable, Cv: Variable>(
-    vtype: &Type<Tv, Cv>,
-    itype: &Type<Tv, Cv>,
-) -> anyhow::Result<Type<Tv, Cv>> {
-    // first, we unify the vector to [Any; n] in order to get the length
-    let v_length = Type::<Void, Symbol>::Bytes(ConstExpr::Var(Symbol::from("n")))
-        .unify_cvars(vtype)
-        .and_then(|h| h.get(&Symbol::from("n")).cloned())
-        .context(format!("type {:?} cannot be indexed into", vtype))?;
-    log::trace!("indexing into bytes of length {:?}", v_length);
-    // then, we unify the index into a range to see whether it's correct.
-    let i_params = Type::<Void, Symbol>::NatRange(
-        ConstExpr::Var(Symbol::from("a")),
-        ConstExpr::Var(Symbol::from("b")),
-    )
-    .unify_cvars(itype)
-    .unwrap_or_default();
-    let i_upper_bound = i_params.get(&Symbol::from("b")).cloned().context(format!(
-        "bytes index of type {:?} has no upper bound",
-        itype
-    ))?;
-    if !i_upper_bound.lt(&v_length) {
-        Err(anyhow::anyhow!(
-            "cannot index into vector {:?} of length {:?} with something of type {:?}",
-            vtype,
-            v_length,
-            itype
-        ))
-    } else {
-        Ok(Type::NatRange(0u32.into(), 255u32.into()))
-    }
+    vtype: &Type<Tv>,
+    itype: &Type<Tv>,
+) -> anyhow::Result<Type<Tv>> {
+    todo!()
 }
 
-fn type_vector_ref<Tv: Variable, Cv: Variable>(
-    vtype: &Type<Tv, Cv>,
-    itype: &Type<Tv, Cv>,
-) -> anyhow::Result<Type<Tv, Cv>> {
-    // first, we unify the vector to [Any; n] in order to get the length
-    let v_length =
-        Type::<Void, Symbol>::Vectorof(Type::Any.into(), ConstExpr::Var(Symbol::from("n")))
-            .unify_cvars(vtype)
-            .and_then(|h| h.get(&Symbol::from("n")).cloned())
-            .context(format!("type {:?} cannot be indexed into", vtype))?;
-    log::trace!("indexing into vector of length {:?}", v_length);
-    // then, we unify the index into a range to see whether it's correct.
-    let i_params = Type::<Void, Symbol>::NatRange(
-        ConstExpr::Var(Symbol::from("a")),
-        ConstExpr::Var(Symbol::from("b")),
-    )
-    .unify_cvars(itype)
-    .unwrap_or_default();
-    let i_lower_bound = i_params.get(&Symbol::from("a")).cloned().context(format!(
-        "vector index of type {:?} has no lower bound",
-        itype
-    ))?;
-    let i_upper_bound = i_params.get(&Symbol::from("b")).cloned().context(format!(
-        "vector index of type {:?} has no upper bound",
-        itype
-    ))?;
-    log::debug!(
-        "comparing upper bound {:?} to v_length {:?}",
-        i_upper_bound,
-        v_length
-    );
-    if !i_upper_bound.lt(&v_length) {
-        Err(anyhow::anyhow!(
-            "cannot index into vector {:?} of length {:?} with something of type {:?}",
-            vtype,
-            v_length,
-            itype
-        ))
-    } else {
-        Ok(if i_upper_bound.leq(&i_lower_bound) {
-            vtype.index(Some(&i_upper_bound)).unwrap().into_owned()
-        } else {
-            vtype.index(None).unwrap().into_owned()
-        })
-    }
+fn type_vector_ref<Tv: Variable>(vtype: &Type<Tv>, itype: &Type<Tv>) -> anyhow::Result<Type<Tv>> {
+    todo!()
 }
 
-fn typecheck_type_expr<Tv: Variable, Cv: Variable>(
-    state: &TypecheckState<Tv, Cv>,
+fn typecheck_type_expr<Tv: Variable>(
+    state: &TypecheckState<Tv>,
     raw: Ctx<RawTypeExpr>,
-) -> CtxResult<Type<Tv, Cv>> {
+) -> CtxResult<Type<Tv>> {
     match raw.deref().clone() {
         RawTypeExpr::Sym(s) => {
             if s == Symbol::from("Nat") {
-                Ok(Type::all_nat())
+                Ok(Type::Nat)
             } else if s == Symbol::from("Any") {
                 Ok(Type::Any)
             } else if s == Symbol::from("Nothing") {
@@ -1454,59 +876,30 @@ fn typecheck_type_expr<Tv: Variable, Cv: Variable>(
             Ok(Type::Vector(processed_tt?))
         }
         RawTypeExpr::Vectorof(t, n) => {
-            let t = typecheck_type_expr(state, t)?;
-            let n = typecheck_const_expr(state, n)?;
-            Ok(Type::Vectorof(t.into(), n))
+            todo!()
         }
         RawTypeExpr::NatRange(a, b) => {
-            let a = typecheck_const_expr(state, a)?;
-            let b = typecheck_const_expr(state, b)?;
-            Ok(Type::NatRange(a, b))
+            todo!()
         }
         RawTypeExpr::DynVectorof(v) => {
             let v = typecheck_type_expr(state, v)?;
             Ok(Type::DynVectorof(v.into()))
         }
-        RawTypeExpr::Bytes(c) => Ok(Type::Bytes(typecheck_const_expr(state, c)?)),
+        RawTypeExpr::Bytes(c) => todo!(),
         RawTypeExpr::DynBytes => Ok(Type::DynBytes),
-    }
-}
-
-fn typecheck_const_expr<Tv: Variable, Cv: Variable>(
-    state: &TypecheckState<Tv, Cv>,
-    raw: Ctx<RawConstExpr>,
-) -> CtxResult<ConstExpr<Cv>> {
-    match raw.deref() {
-        RawConstExpr::Sym(s) => Ok(state
-            .lookup_cgvar(*s)
-            .context("no cgvar")
-            .err_ctx(raw.ctx())?),
-        RawConstExpr::Lit(a) => Ok(ConstExpr::Lit(*a)),
-        RawConstExpr::Plus(a, b) => Ok(ConstExpr::Add(
-            typecheck_const_expr(state, a.clone())?.into(),
-            typecheck_const_expr(state, b.clone())?.into(),
-        )),
-        RawConstExpr::Mult(a, b) => Ok(ConstExpr::Mul(
-            typecheck_const_expr(state, a.clone())?.into(),
-            typecheck_const_expr(state, b.clone())?.into(),
-        )),
     }
 }
 
 /// Monomorphizes a set of function definitions and a "preliminary" body into a fully degenericized version.
 ///
 /// Uses monomorphization for const-generics and type erasure for "normal" generics. But that's unspecified.
-pub fn monomorphize(
-    fun_defs: List<FunDefn<TypeParam, CgParam>>,
-    body: Expr<TypeParam, CgParam>,
-) -> Program {
+pub fn monomorphize(fun_defs: List<FunDefn<TypeParam>>, body: Expr<TypeParam>) -> Program {
     // The basic idea is to identify all calls to generic functions, replacing them with non-generic calls to generated functions.
     let monomorph_collector = DashMap::new();
     let body = monomorphize_inner(
         &fun_defs.into_iter().map(|fd| (fd.name, fd)).collect(),
         &body,
         &monomorph_collector,
-        &Map::new(),
         &Map::new(),
     );
     Program {
@@ -1516,13 +909,12 @@ pub fn monomorphize(
 }
 
 fn monomorphize_inner(
-    fun_defs: &Map<Symbol, FunDefn<TypeParam, CgParam>>,
-    body: &Expr<TypeParam, CgParam>,
+    fun_defs: &Map<Symbol, FunDefn<TypeParam>>,
+    body: &Expr<TypeParam>,
     mangled: &DashMap<Symbol, FunDefn>,
     tvar_scope: &Map<TypeParam, Type>,
-    cvar_scope: &Map<CgParam, ConstExpr<Void>>,
 ) -> Expr {
-    let recurse = |b| monomorphize_inner(fun_defs, b, mangled, tvar_scope, cvar_scope);
+    let recurse = |b| monomorphize_inner(fun_defs, b, mangled, tvar_scope);
     Expr {
         inner: match body.inner.clone() {
             ExprInner::UniOp(op, a) => ExprInner::UniOp(op, recurse(&a).into()),
@@ -1534,11 +926,7 @@ fn monomorphize_inner(
                 recurse(&a).into(),
                 recurse(&b).into(),
             ),
-            ExprInner::Exp(k, a, b) => ExprInner::Exp(
-                k.fill(|c| cvar_scope.get(c).cloned().unwrap()),
-                recurse(&a).into(),
-                recurse(&b).into(),
-            ),
+            ExprInner::Exp(k, a, b) => ExprInner::Exp(k, recurse(&a).into(), recurse(&b).into()),
             ExprInner::Let(binds, i) => ExprInner::Let(
                 binds
                     .iter()
@@ -1561,9 +949,9 @@ fn monomorphize_inner(
                 }
                 ExprInner::Apply(f, args.iter().map(recurse).collect())
             }
-            ExprInner::ApplyGeneric(f, tvars, cvars, args) => {
+            ExprInner::ApplyGeneric(f, tvars, args) => {
                 // generate a monomorphized version
-                let mangled_name = if tvars.is_empty() && cvars.is_empty() {
+                let mangled_name = if tvars.is_empty() {
                     f
                 } else {
                     static MANGLE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -1589,14 +977,8 @@ fn monomorphize_inner(
                             for (k, v) in tvars.iter() {
                                 tvs.insert(
                                     *k,
-                                    v.fill_cvars(|c| cvar_scope.get(c).cloned().unwrap())
-                                        .fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
+                                    v.fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
                                 );
-                            }
-                        }),
-                        &cvar_scope.clone().tap_mut(|cvs| {
-                            for (k, v) in cvars.iter() {
-                                cvs.insert(*k, v.fill(|cv| cvar_scope.get(cv).cloned().unwrap()));
                             }
                         }),
                     );
@@ -1614,31 +996,19 @@ fn monomorphize_inner(
             ExprInner::LitNum(v) => ExprInner::LitNum(v),
             ExprInner::LitVec(lv) => ExprInner::LitVec(lv.iter().map(recurse).collect()),
             ExprInner::Var(v) => ExprInner::Var(v),
-            ExprInner::IsType(a, b) => ExprInner::IsType(
-                a,
-                b.fill_cvars(|c| cvar_scope.get(c).cloned().unwrap())
-                    .fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
-            ),
+            ExprInner::IsType(a, b) => {
+                ExprInner::IsType(a, b.fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()))
+            }
             ExprInner::VectorRef(v, i) => {
                 ExprInner::VectorRef(recurse(&v).into(), recurse(&i).into())
             }
             ExprInner::VectorUpdate(v, i, n) => {
                 ExprInner::VectorUpdate(recurse(&v).into(), recurse(&i).into(), recurse(&n).into())
             }
-            ExprInner::LitConst(cexpr) => ExprInner::LitNum(
-                cexpr
-                    .fill(|c| cvar_scope.get(c).cloned().unwrap())
-                    .try_eval()
-                    .unwrap(),
-            ),
             ExprInner::VectorSlice(v, i, j) => {
                 ExprInner::VectorSlice(recurse(&v).into(), recurse(&i).into(), recurse(&j).into())
             }
-            ExprInner::Loop(n, body, res) => ExprInner::Loop(
-                n.fill(|c| cvar_scope.get(c).cloned().unwrap()),
-                body.iter().map(|(s, v)| (*s, recurse(v))).collect(),
-                recurse(&res).into(),
-            ),
+            ExprInner::Loop(n, body, res) => todo!(),
             ExprInner::Fail => ExprInner::Fail,
             ExprInner::LitBytes(b) => ExprInner::LitBytes(b),
             ExprInner::LitBVec(v) => ExprInner::LitBVec(v.iter().map(recurse).collect()),
@@ -1646,10 +1016,10 @@ fn monomorphize_inner(
                 ExprInner::ExternApply(x, args.iter().map(recurse).collect())
             }
             ExprInner::Extern(x) => ExprInner::Extern(x),
+            ExprInner::LitConst(_) => todo!(),
         },
         itype: body
             .itype
-            .fill_cvars(|c| cvar_scope.get(c).cloned().unwrap())
             .fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
     }
 }
@@ -1667,7 +1037,7 @@ mod tests {
     #[test]
     fn typecheck_simple() {
         init_logs();
-        let state: TypecheckState<Void, Void> = TypecheckState::new();
+        let state: TypecheckState<Void> = TypecheckState::new();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:#?}",

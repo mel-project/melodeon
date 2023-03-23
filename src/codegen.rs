@@ -105,10 +105,7 @@ fn codegen_expr(expr: &Expr) -> Value {
                 BinOp::Div => Value::symbol("/"),
                 BinOp::Mod => Value::symbol("%"),
                 BinOp::Append => {
-                    if x.itype
-                        .deunionize()
-                        .any(|f| matches!(f, Type::Bytes(_) | Type::DynBytes))
-                    {
+                    if x.itype.deunionize().any(|f| matches!(f, Type::DynBytes)) {
                         Value::symbol("b-concat")
                     } else {
                         Value::symbol("v-concat")
@@ -158,7 +155,7 @@ fn codegen_expr(expr: &Expr) -> Value {
         ExprInner::Apply(f, vec) => std::iter::once(Value::symbol(f.to_string()))
             .chain(vec.iter().map(codegen_expr))
             .sexpr(),
-        ExprInner::ApplyGeneric(_, _, _, _) => todo!(),
+        ExprInner::ApplyGeneric(_, _, _) => todo!(),
         ExprInner::LitNum(num) => {
             // lexpr does not support u64, so we desugar to smaller numbers
             u256_to_sexpr(*num)
@@ -173,10 +170,7 @@ fn codegen_expr(expr: &Expr) -> Value {
         ExprInner::Var(v) => Value::symbol(v.to_string()),
         ExprInner::IsType(a, t) => generate_type_check(t, Value::symbol(a.to_string())),
         ExprInner::VectorRef(v, i) => [
-            if v.itype
-                .deunionize()
-                .any(|f| matches!(f, Type::Bytes(_) | Type::DynBytes))
-            {
+            if v.itype.deunionize().any(|f| matches!(f, Type::DynBytes)) {
                 Value::symbol("b-get")
             } else {
                 Value::symbol("v-get")
@@ -204,7 +198,7 @@ fn codegen_expr(expr: &Expr) -> Value {
             [].sexpr(),
             [
                 Value::symbol("loop"),
-                Value::Number(n.eval().as_u64().into()),
+                Value::Number(n.as_u64().into()),
                 [Value::symbol("set-let"), [].sexpr()]
                     .into_iter()
                     .chain(bod.iter().map(|(s, x)| {
@@ -241,7 +235,7 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
         Type::Nothing => Value::Number(1.into()),
         Type::Any => Value::Number(0.into()),
         Type::Var(_) => unreachable!(),
-        Type::NatRange(_, _) => [Value::symbol("="), left_expr, right_expr].sexpr(),
+        Type::Nat => todo!(),
         Type::Vector(v) => v
             .iter()
             .enumerate()
@@ -265,36 +259,7 @@ fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
             .fold(Value::Number(1_u64.into()), |a, b| {
                 [Value::symbol("and"), a, b].sexpr()
             }),
-        Type::Bytes(b) => (0..b.eval().as_u64().saturating_sub(1))
-            .map(|i| {
-                generate_eq_check(
-                    &Type::NatRange(0_u32.into(), 1_u32.into()),
-                    [
-                        Value::symbol("b-get"),
-                        left_expr.clone(),
-                        Value::Number((i as u64).into()),
-                    ]
-                    .sexpr(),
-                    [
-                        Value::symbol("b-get"),
-                        right_expr.clone(),
-                        Value::Number((i as u64).into()),
-                    ]
-                    .sexpr(),
-                )
-            })
-            .fold(Value::Number(1_u64.into()), |a, b| {
-                [Value::symbol("and"), a, b].sexpr()
-            }),
-        Type::Vectorof(t, n) => generate_eq_check(
-            &Type::Vector(
-                std::iter::repeat(t.deref().clone())
-                    .take(n.eval().as_usize())
-                    .collect(),
-            ),
-            left_expr,
-            right_expr,
-        ),
+
         Type::Struct(_, _) => todo!(),
         Type::Union(t, u) => {
             let both_t = [
@@ -360,30 +325,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
         Type::Nothing => Value::Number(0.into()),
         Type::Any => Value::Number(1.into()),
         Type::Var(_) => unreachable!(),
-        Type::NatRange(a, b) => {
-            let is_number_expr = [
-                Value::symbol("="),
-                Value::Number(0.into()),
-                [Value::symbol("typeof"), inner.clone()].sexpr(),
-            ]
-            .sexpr();
-            if a.eval() == U256::MIN && b.eval() == U256::MAX {
-                is_number_expr
-            } else {
-                [
-                    Value::symbol("if"),
-                    is_number_expr,
-                    [
-                        Value::symbol("and"),
-                        [Value::symbol(">="), inner.clone(), u256_to_sexpr(a.eval())].sexpr(),
-                        [Value::symbol("<="), inner, u256_to_sexpr(b.eval())].sexpr(),
-                    ]
-                    .sexpr(),
-                    Value::Number(0i32.into()),
-                ]
-                .sexpr()
-            }
-        }
+        Type::Nat => todo!(),
         Type::Vector(inners) => {
             let is_vector_expr = [
                 Value::symbol("="),
@@ -422,14 +364,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
                     |a, b| [Value::symbol("if"), a, b, Value::Number(0.into())].sexpr(),
                 )
         }
-        Type::Vectorof(v, n) => generate_type_check(
-            &Type::Vector(
-                std::iter::repeat(v.deref().clone())
-                    .take(n.eval().as_usize())
-                    .collect(),
-            ),
-            inner,
-        ),
+
         Type::Struct(_, v) => generate_type_check(
             &Type::Vector(v.iter().map(|t| t.1.clone()).collect()),
             inner,
@@ -440,27 +375,7 @@ fn generate_type_check(t: &Type, inner: Value) -> Value {
             [Value::symbol("or"), t_check, u_check].sexpr()
         }
         Type::DynVectorof(_) => panic!("is expressions on dynamic vectors not yet supported"),
-        Type::Bytes(n) => {
-            let is_bytes_expr = [
-                Value::symbol("="),
-                Value::Number(1.into()),
-                [Value::symbol("typeof"), inner.clone()].sexpr(),
-            ]
-            .sexpr();
-            let length_correct_expr = [
-                Value::symbol("="),
-                Value::Number((n.eval().as_u64()).into()),
-                [Value::symbol("b-len"), inner].sexpr(),
-            ]
-            .sexpr();
-            [
-                Value::symbol("if"),
-                is_bytes_expr,
-                length_correct_expr,
-                Value::Number(0.into()),
-            ]
-            .sexpr()
-        }
+
         Type::DynBytes => [
             Value::symbol("="),
             Value::Number(1.into()),

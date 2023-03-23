@@ -104,7 +104,7 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId, root: &Path) -> Ctx<RawD
             let body = parse_expr(children.next().unwrap(), source);
             RawDefn::Function {
                 name: fun_name,
-                cgvars,
+
                 genvars,
                 args: fun_args,
                 rettype: ret_type,
@@ -561,7 +561,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let varbind = parse_expr(children.next().unwrap(), source);
             RawExpr::For(varname, varbind, body).with_ctx(ctx)
         }
-        Rule::cgvar_name => RawExpr::CgVar(Symbol::from(pair.as_str())).with_ctx(ctx),
+
         Rule::struct_literal => {
             let mut children = pair.into_inner();
             let name = Symbol::from(children.next().unwrap().as_str());

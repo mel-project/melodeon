@@ -1,4 +1,3 @@
-mod poly;
 mod typecheck;
 //mod typed_ast;
 mod types;

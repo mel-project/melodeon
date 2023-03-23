@@ -11,7 +11,7 @@ use std::path::Path;
 use demod::Demodularizer;
 use typesys::Type;
 
-/// Compiles a melodeon program by its literal string, resolving dependencies assuming that the string was read from a file at the given module path. Returns the Mil representation, as well as the type of the
+/// Compiles a melodeon program by its literal string, resolving dependencies assuming that the string was read from a file at the given module path. Returns the Mil representation, as well as the type of the expression.
 pub fn compile(melo_code: &str, module_path: &Path) -> context::CtxResult<(String, Type)> {
     let mut root_path = module_path
         .canonicalize()

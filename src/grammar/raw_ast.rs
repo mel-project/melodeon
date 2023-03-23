@@ -20,7 +20,6 @@ pub struct RawProgram {
 pub enum RawDefn {
     Function {
         name: Ctx<Symbol>,
-        cgvars: List<Ctx<Symbol>>,
         genvars: List<Ctx<Symbol>>,
         args: List<Ctx<RawTypeBind>>,
         rettype: Option<Ctx<RawTypeExpr>>,
@@ -84,7 +83,6 @@ pub enum RawExpr {
     LitVec(List<Ctx<Self>>),
     LitStruct(Symbol, Map<Symbol, Ctx<RawExpr>>),
     Var(Symbol),
-    CgVar(Symbol),
 
     Apply(
         Ctx<Self>,
@@ -184,41 +182,6 @@ fn visit(
     }
 }
 
-// pub fn sort_defsx(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
-//     // TODO assumes no cycles, will not halt if there are cycles
-//     defs.clone()
-//         .into_iter()
-//         .fold((List::new(), Set::new()), |(sorted, visited), def| {
-//             sort_single_def(def, defs.clone(), sorted, visited)
-//         })
-//         .0
-// }
-
-// fn sort_single_def(
-//     def: Ctx<RawDefn>,
-//     defs: List<Ctx<RawDefn>>,
-//     sorted: List<Ctx<RawDefn>>,
-//     visited: Set<Symbol>,
-// ) -> (List<Ctx<RawDefn>>, Set<Symbol>) {
-//     let name = def.name();
-//     if !visited.contains(&name) {
-//         let (mut sorted, visited) = def.parents().iter().fold(
-//             (sorted, visited.update(name)),
-//             |(sorted, visited), parent|
-//                 sort_single_def(
-//                     find_by_name(&defs, *parent)
-//                         .expect("A parent reference should always be in the definitions list, this is a bug").clone(),
-//                     defs.clone(),
-//                     sorted,
-//                     visited));
-
-//         sorted.push_back(def);
-//         (sorted, visited)
-//     } else {
-//         (defs, visited)
-//     }
-// }
-
 pub fn find_by_name(defs: &List<Ctx<RawDefn>>, name: Symbol) -> Option<&Ctx<RawDefn>> {
     defs.iter().find(|def| def.name() == name)
 }
@@ -294,10 +257,7 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
 }
 
 impl RawExpr {
-    pub fn free_variables<Tv: Variable, Cv: Variable>(
-        &self,
-        var_set: &Map<Symbol, Type<Tv, Cv>>,
-    ) -> Set<Symbol> {
+    pub fn free_variables<Tv: Variable>(&self, var_set: &Map<Symbol, Type<Tv>>) -> Set<Symbol> {
         let vars = expr_parents(self);
         vars.into_iter()
             .filter(|sym| var_set.contains_key(sym))
@@ -348,7 +308,6 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
             .without(avar),
         RawExpr::Fail => Set::new(),
         RawExpr::LitNum(_) => Set::new(),
-        RawExpr::CgVar(_) => Set::new(),
         RawExpr::Loop(_, body, inner) => body
             .iter()
             .map(|a| rec(&a.1))
