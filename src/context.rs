@@ -153,7 +153,7 @@ impl<T: Display> Ctx<T> {
 impl<T: Display> Display for Ctx<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(
-            &self.pretty_print(|mid| std::fs::read_to_string(&mid.to_string()).ok()),
+            &self.pretty_print(|mid| std::fs::read_to_string(mid.to_string()).ok()),
             f,
         )
     }

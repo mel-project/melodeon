@@ -7,7 +7,7 @@ use argh::FromArgs;
 use log::LevelFilter;
 use melodeon::{
     codegen::codegen_program,
-    context::{CtxResult, ModuleId, ToCtxErr},
+    context::{CtxResult, ModuleId},
     demod::Demodularizer,
     typesys::typecheck_program,
 };
@@ -50,7 +50,7 @@ fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
     })?;
     let tchecked = time_stage("typecheck", || typecheck_program(raw_input))?;
     let product = time_stage("codegen", || codegen_program(tchecked));
-    std::fs::write(Path::new(args.output.as_str()), product.as_bytes()).err_ctx(None)?;
+    println!("{}", serde_yaml::to_string(&product).unwrap());
     Ok(())
 }
 

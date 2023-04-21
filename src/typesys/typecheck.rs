@@ -1,27 +1,23 @@
-use std::{fmt::Debug, ops::Deref, sync::atomic::AtomicUsize};
+use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Context;
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use ethnum::U256;
 use rustc_hash::FxHashSet;
-use tap::Tap;
 
 use crate::{
-    containers::{List, Map, Set, Symbol, Void},
+    containers::{List, Map, Symbol},
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
-    grammar::{sort_defs, RawExpr, RawProgram, RawTypeExpr},
+    grammar::{sort_defs, RawDefn, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program, UniOp},
     typesys::{Type, Variable},
 };
 
-use self::{
-    facts::TypeFacts,
-    state::{FunctionType, TypecheckState},
-};
+use self::{facts::TypeFacts, scope::Scope};
 
 mod facts;
 
-mod state;
+mod scope;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TypeParam(Symbol);
@@ -90,10 +86,29 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
     // Topologically sort definitions
     let sorted = sort_defs(raw.definitions.clone());
 
-    // build the typecheck state
-    let mut state = TypecheckState::new();
+    // We build a *provisional* typecheck state for the top-level functions, which is used to typecheck their bodies only. This allows us to typecheck recursive functions correctly.
+    let provisional_toplevel_scope = sorted.iter().try_fold(Scope::new(), |state, defn| {
+        if let RawDefn::Function {
+            name,
+            genvars,
+            args: _,
+            rettype: Some(rettype),
+            body: _,
+        } = defn.deref()
+        {
+            let istate: Scope<TypeParam> = genvars.iter().fold(state.clone(), |state, sym| {
+                state.bind_type_alias(**sym, Type::Var(TypeParam(**sym)))
+            });
+            let rettype = typecheck_type_expr(&istate, rettype.clone())?;
+            Ok::<_, CtxErr>(state.bind_var(**name, rettype))
+        } else {
+            Ok::<_, CtxErr>(state)
+        }
+    })?;
+
+    // build the typecheck scope
+    let mut scope = provisional_toplevel_scope;
     let mut fun_defs: List<FunDefn<TypeParam>> = List::new();
-    //for definition in raw.definitions.iter() {
     for definition in sorted.iter() {
         match definition.deref() {
             crate::grammar::RawDefn::Function {
@@ -104,10 +119,9 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                 body,
             } => {
                 // bind the type variables, then the CG-variables
-                let istate: TypecheckState<TypeParam> =
-                    genvars.iter().fold(state.clone(), |state, sym| {
-                        state.bind_type_alias(**sym, Type::Var(TypeParam(**sym)))
-                    });
+                let istate: Scope<TypeParam> = genvars.iter().fold(scope.clone(), |state, sym| {
+                    state.bind_type_alias(**sym, Type::Var(TypeParam(**sym)))
+                });
 
                 // now also bind the argument types
                 let state_no_args = istate.clone();
@@ -134,15 +148,15 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                 } else {
                     body.itype.clone()
                 };
-                let fun_info = FunctionType {
+                let fun_info = Type::Lambda {
                     free_vars: genvars.iter().map(|c| TypeParam(**c)).collect(),
                     args: args
                         .iter()
                         .map(|s| istate.lookup_var(*s.name).unwrap())
                         .collect(),
-                    result: rettype,
+                    result: rettype.into(),
                 };
-                state = state.bind_fun(**name, fun_info);
+                scope = scope.bind_var(**name, fun_info);
                 fun_defs.push(FunDefn {
                     name: **name,
                     args: args.iter().map(|s| *s.name).collect(),
@@ -151,8 +165,8 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
             }
             crate::grammar::RawDefn::Constant(_, _) => todo!(),
             crate::grammar::RawDefn::Struct { name, fields } => {
-                let tstate = state.clone();
-                state = state.bind_type_alias(
+                let tstate = scope.clone();
+                scope = scope.bind_type_alias(
                     **name,
                     Type::Struct(
                         **name,
@@ -172,31 +186,23 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                 panic!("non-demodularized AST passed into typechecker")
             }
             crate::grammar::RawDefn::TypeAlias(a, b) => {
-                let b = typecheck_type_expr(&state, b.clone())?;
-                state = state.bind_type_alias(**a, b);
+                let b = typecheck_type_expr(&scope, b.clone())?;
+                scope = scope.bind_type_alias(**a, b);
             }
         }
     }
     log::trace!("initial definitions created: {:?}", fun_defs);
     // time to typecheck the expression preliminarily
-    let (prelim_body, _) = typecheck_expr(state, raw.body.clone())?;
+    let (prelim_body, _) = typecheck_expr(scope, raw.body.clone())?;
     log::trace!("preliminary body created: {:?}", prelim_body);
 
     // MONOMORPHIZE!
     Ok(monomorphize(fun_defs, prelim_body))
 }
 
-/*
-pub fn typecheck_bindings<Tv: Variable, Cv: Variable>(binds: Vec<(Ctx<Symbol>, Ctx<RawExpr>)>)
--> CtxResult<Vec<(Ctx<Symbol>, (Expr<Tv,Cv>, TypeFacts<Tv,Cv>))>> {
-    let recurse = |c| typecheck_expr(state.clone(), c);
-    binds.into_iter().map(|(v,e)| (v, recurse(e))).collect()
-}
-*/
-
 /// Typechecks a single expression, returning a single typed ast node.
 pub fn typecheck_expr<Tv: Variable>(
-    state: TypecheckState<Tv>,
+    state: Scope<Tv>,
     raw: Ctx<RawExpr>,
 ) -> CtxResult<(Expr<Tv>, TypeFacts<Tv>)> {
     let recurse = |c| typecheck_expr(state.clone(), c);
@@ -234,26 +240,26 @@ pub fn typecheck_expr<Tv: Variable>(
         RawExpr::If(c, x, y) => {
             let (c, c_facts) = recurse(c)?;
             let not_c_facts = c_facts.clone().negate_against(&state);
-            let (x, x_facts) = typecheck_expr(state.clone().with_facts(&c_facts), x)?;
-            let (y, y_facts) = typecheck_expr(state.clone().with_facts(&not_c_facts), y)?;
+            let (x, _x_facts) = typecheck_expr(state.clone().with_facts(&c_facts), x)?;
+            let (y, _y_facts) = typecheck_expr(state.clone().with_facts(&not_c_facts), y)?;
             // okay, so here's the deal.
             // "if c then x else y" is true implies either "c && x" is true, or "!c && y" is true.
             // unfortunately, we cannot really express "or" in typefacts form.
             // thus, we check if one of the branches is totally false (this is the case when this "if" is autogenerated from && or ||)
             // then we take the other branch.
-            let result_facts = if x.itype.always_falsy() {
-                not_c_facts.union(y_facts)
-            } else if y.itype.always_falsy() {
-                c_facts.union(x_facts)
-            } else {
-                TypeFacts::empty()
-            };
+            // let result_facts = if x.itype.always_falsy() {
+            //     not_c_facts.union(y_facts)
+            // } else if y.itype.always_falsy() {
+            //     c_facts.union(x_facts)
+            // } else {
+            //     TypeFacts::empty()
+            // };
             Ok((
                 Expr {
                     itype: x.itype.smart_union(&y.itype),
                     inner: ExprInner::If(c.into(), x.into(), y.into()),
                 },
-                result_facts,
+                TypeFacts::empty(),
             ))
         }
         RawExpr::BinOp(op, a, b) => {
@@ -386,8 +392,8 @@ pub fn typecheck_expr<Tv: Variable>(
                 }
                 crate::grammar::BinOp::Append => {
                     // vector append
-                    let a_expr = a_expr?;
-                    let b_expr = b_expr?;
+                    let _a_expr = a_expr?;
+                    let _b_expr = b_expr?;
                     todo!()
                 }
                 crate::grammar::BinOp::Lor => {
@@ -502,34 +508,34 @@ pub fn typecheck_expr<Tv: Variable>(
             // TODO impl this
             Ok((
                 Expr {
-                    itype: itype.clone(),
+                    itype,
                     inner: ExprInner::Var(v),
                 },
                 TypeFacts::empty(),
             ))
         }
-        RawExpr::Apply(f, tvars, args) => {
-            if let RawExpr::Var(f) = f.deref() {
-                let ftype = state
-                    .lookup_fun(*f)
-                    .context(format!("undefined function: {:?}", f))
-                    .err_ctx(ctx)?;
-                if ftype.args.len() != args.len() {
+        RawExpr::Apply(f, tvars, call_args) => {
+            let (fval, _) = recurse(f.clone())?;
+            if let Type::Lambda {
+                free_vars: _,
+                args,
+                result,
+            } = fval.itype.clone()
+            {
+                if args.len() != call_args.len() {
                     Err(anyhow::anyhow!(
-                        "calling function {} with the wrong arity (expected {}, got {})",
-                        f,
-                        ftype.args.len(),
-                        args.len()
+                        "calling function with the wrong arity (expected {}, got {})",
+                        args.len(),
+                        call_args.len()
                     )
                     .with_ctx(ctx))
                 } else {
                     // create a mapping for the CG-vars
-                    let typechecked_args = args
+                    let typechecked_args = call_args
                         .iter()
                         .map(|a| Ok(recurse(a.clone())?.0))
                         .collect::<CtxResult<List<_>>>()?;
-                    let mut generic_mapping = ftype
-                        .args
+                    let mut generic_mapping = args
                         .iter()
                         .zip(typechecked_args.iter())
                         .map(|(arg_type, arg)| {
@@ -546,7 +552,7 @@ pub fn typecheck_expr<Tv: Variable>(
                         generic_mapping.insert(k, v);
                     }
 
-                    for (arg, required_type) in typechecked_args.iter().zip(ftype.args.iter()) {
+                    for (arg, required_type) in typechecked_args.iter().zip(args.iter()) {
                         let required_type = required_type
                             .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())
                             .context(format!(
@@ -566,28 +572,24 @@ pub fn typecheck_expr<Tv: Variable>(
                     }
                     Ok((
                         Expr {
-                            itype: ftype
-                                .result
+                            itype: result
                                 .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())
                                 .context(format!(
                                     "cannot fill type variables in result type {:?}",
-                                    ftype.result
+                                    result
                                 ))
                                 .err_ctx(ctx)?,
-                            inner: if generic_mapping.is_empty() {
-                                ExprInner::Apply(*f, typechecked_args)
-                            } else {
-                                ExprInner::ApplyGeneric(*f, generic_mapping, typechecked_args)
-                            },
+                            inner: ExprInner::ApplyGeneric(
+                                fval.into(),
+                                generic_mapping,
+                                typechecked_args,
+                            ),
                         },
                         TypeFacts::empty(),
                     ))
                 }
             } else {
-                Err(
-                    anyhow::anyhow!("cannot call anything other than a function literal")
-                        .with_ctx(ctx),
-                )
+                Err(anyhow::anyhow!("trying to call a non-function value").with_ctx(f.ctx()))
             }
         }
         RawExpr::Field(a, f) => {
@@ -621,19 +623,16 @@ pub fn typecheck_expr<Tv: Variable>(
             )
         }
         RawExpr::VectorRef(v, i) => {
-            todo!()
-            // let (v, _) = recurse(v)?;
-            // let (i, _) = recurse(i)?;
-            // let restype = type_vector_ref(&v.itype, &i.itype)
-            //     .or_else(|_| type_bytes_ref(&v.itype, &i.itype))
-            //     .err_ctx(ctx)?;
-            // Ok((
-            //     Expr {
-            //         itype: restype,
-            //         inner: ExprInner::VectorRef(v.into(), i.into()),
-            //     },
-            //     TypeFacts::empty(),
-            // ))
+            let (v, _) = recurse(v)?;
+            let (i, _) = recurse(i)?;
+            let restype = type_vector_ref(&v.itype, &i.itype).err_ctx(ctx)?;
+            Ok((
+                Expr {
+                    itype: restype,
+                    inner: ExprInner::VectorRef(v.into(), i.into()),
+                },
+                TypeFacts::empty(),
+            ))
         }
         RawExpr::VectorUpdate(v, i, x) => {
             let (v, _) = recurse(v)?;
@@ -707,7 +706,7 @@ pub fn typecheck_expr<Tv: Variable>(
             ))
         }
 
-        RawExpr::VectorSlice(v, l, r) => {
+        RawExpr::VectorSlice(_v, _l, _r) => {
             todo!()
         }
         RawExpr::LitStruct(name, fields) => {
@@ -794,42 +793,27 @@ pub fn typecheck_expr<Tv: Variable>(
             Ok((ExprInner::LitBVec(args).wrap(itype), TypeFacts::empty()))
         }
         RawExpr::Unsafe(s) => typecheck_expr(state.bind_safety(false), s),
-        RawExpr::Extern(ext) => {
-            if state.lookup_safety() {
-                return Err(
-                    anyhow::anyhow!("cannot use an external variable without unsafe").with_ctx(ctx),
-                );
-            }
-            Ok((
-                ExprInner::Extern(ext.deref().clone()).wrap_any(),
-                TypeFacts::empty(),
-            ))
-        }
-        RawExpr::ExternApply(f, args) => {
-            if state.lookup_safety() {
-                return Err(
-                    anyhow::anyhow!("cannot call an external function without unsafe")
-                        .with_ctx(ctx),
-                );
-            }
-            let args = args
-                .into_iter()
-                .map(|f| Ok(recurse(f)?.0))
-                .collect::<CtxResult<List<_>>>()?;
-            Ok((
-                ExprInner::ExternApply(f.deref().clone(), args).wrap_any(),
-                TypeFacts::empty(),
-            ))
-        }
     }
 }
 
 fn type_vector_ref<Tv: Variable>(vtype: &Type<Tv>, itype: &Type<Tv>) -> anyhow::Result<Type<Tv>> {
-    todo!()
+    if !itype.subtype_of(&Type::Nat) {
+        anyhow::bail!("vector index not a Nat")
+    }
+    // we go through the type recursively, building up a union
+    match vtype {
+        Type::DynVectorof(t) => Ok(t.as_ref().clone()),
+        Type::Vector(lst) => Ok(lst.iter().fold(Type::Nothing, |a, b| a.smart_union(b))),
+        Type::Union(t, u) => Ok(Type::Union(
+            type_vector_ref(t, itype)?.into(),
+            type_vector_ref(u, itype)?.into(),
+        )),
+        t => anyhow::bail!("type {:?} cannot be index into", t),
+    }
 }
 
 fn typecheck_type_expr<Tv: Variable>(
-    state: &TypecheckState<Tv>,
+    state: &Scope<Tv>,
     raw: Ctx<RawTypeExpr>,
 ) -> CtxResult<Type<Tv>> {
     match raw.deref().clone() {
@@ -886,119 +870,115 @@ pub fn monomorphize(fun_defs: List<FunDefn<TypeParam>>, body: Expr<TypeParam>) -
 }
 
 fn monomorphize_inner(
-    fun_defs: &Map<Symbol, FunDefn<TypeParam>>,
-    body: &Expr<TypeParam>,
-    mangled: &DashMap<Symbol, FunDefn>,
-    tvar_scope: &Map<TypeParam, Type>,
+    _fun_defs: &Map<Symbol, FunDefn<TypeParam>>,
+    _body: &Expr<TypeParam>,
+    _mangled: &DashMap<Symbol, FunDefn>,
+    _tvar_scope: &Map<TypeParam, Type>,
 ) -> Expr {
-    let recurse = |b| monomorphize_inner(fun_defs, b, mangled, tvar_scope);
-    Expr {
-        inner: match body.inner.clone() {
-            ExprInner::UniOp(op, a) => ExprInner::UniOp(op, recurse(&a).into()),
-            ExprInner::BinOp(op, a, b) => {
-                ExprInner::BinOp(op, recurse(&a).into(), recurse(&b).into())
-            }
-            ExprInner::If(cond, a, b) => ExprInner::If(
-                recurse(&cond).into(),
-                recurse(&a).into(),
-                recurse(&b).into(),
-            ),
-            ExprInner::Exp(k, a, b) => ExprInner::Exp(k, recurse(&a).into(), recurse(&b).into()),
-            ExprInner::Let(binds, i) => ExprInner::Let(
-                binds
-                    .iter()
-                    .map(|(var, val)| (*var, recurse(val).into()))
-                    .collect(),
-                recurse(&i).into(),
-            ),
-            ExprInner::Apply(f, args) => {
-                // we must monomorphize the function too
-                if mangled.get(&f).is_none() {
-                    let noo = recurse(&fun_defs.get(&f).unwrap().body);
-                    mangled.insert(
-                        f,
-                        FunDefn {
-                            name: f,
-                            args: fun_defs.get(&f).unwrap().args.clone(),
-                            body: noo,
-                        },
-                    );
-                }
-                ExprInner::Apply(f, args.iter().map(recurse).collect())
-            }
-            ExprInner::ApplyGeneric(f, tvars, args) => {
-                // generate a monomorphized version
-                let mangled_name = if tvars.is_empty() {
-                    f
-                } else {
-                    static MANGLE_COUNT: AtomicUsize = AtomicUsize::new(0);
-                    Symbol::from(
-                        format!(
-                            "{:?}-mm{}",
-                            f,
-                            MANGLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                        )
-                        .as_str(),
-                    )
-                };
-                log::trace!("making up a mangled name {:?}!", mangled_name);
-                // if we have a monomorphized version already, we just call that.
-                // otherwise, we must populate the table now
-                if mangled.get(&mangled_name).is_none() {
-                    let unmangled_fundef = fun_defs.get(&f).cloned().unwrap();
-                    let noo = monomorphize_inner(
-                        fun_defs,
-                        &unmangled_fundef.body,
-                        mangled,
-                        &tvar_scope.clone().tap_mut(|tvs| {
-                            for (k, v) in tvars.iter() {
-                                tvs.insert(
-                                    *k,
-                                    v.fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
-                                );
-                            }
-                        }),
-                    );
-                    mangled.insert(
-                        mangled_name,
-                        FunDefn {
-                            name: mangled_name,
-                            args: unmangled_fundef.args,
-                            body: noo,
-                        },
-                    );
-                }
-                ExprInner::Apply(mangled_name, args.iter().map(recurse).collect())
-            }
-            ExprInner::LitNum(v) => ExprInner::LitNum(v),
-            ExprInner::LitVec(lv) => ExprInner::LitVec(lv.iter().map(recurse).collect()),
-            ExprInner::Var(v) => ExprInner::Var(v),
-            ExprInner::IsType(a, b) => {
-                ExprInner::IsType(a, b.fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()))
-            }
-            ExprInner::VectorRef(v, i) => {
-                ExprInner::VectorRef(recurse(&v).into(), recurse(&i).into())
-            }
-            ExprInner::VectorUpdate(v, i, n) => {
-                ExprInner::VectorUpdate(recurse(&v).into(), recurse(&i).into(), recurse(&n).into())
-            }
-            ExprInner::VectorSlice(v, i, j) => {
-                ExprInner::VectorSlice(recurse(&v).into(), recurse(&i).into(), recurse(&j).into())
-            }
-            ExprInner::Loop(n, body, res) => todo!(),
-            ExprInner::Fail => ExprInner::Fail,
-            ExprInner::LitBytes(b) => ExprInner::LitBytes(b),
-            ExprInner::LitBVec(v) => ExprInner::LitBVec(v.iter().map(recurse).collect()),
-            ExprInner::ExternApply(x, args) => {
-                ExprInner::ExternApply(x, args.iter().map(recurse).collect())
-            }
-            ExprInner::Extern(x) => ExprInner::Extern(x),
-            ExprInner::LitConst(_) => todo!(),
-        },
-        itype: body
-            .itype
-            .fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
-    }
+    todo!()
+    // let recurse = |b| monomorphize_inner(fun_defs, b, mangled, tvar_scope);
+    // Expr {
+    //     inner: match body.inner.clone() {
+    //         ExprInner::UniOp(op, a) => ExprInner::UniOp(op, recurse(&a).into()),
+    //         ExprInner::BinOp(op, a, b) => {
+    //             ExprInner::BinOp(op, recurse(&a).into(), recurse(&b).into())
+    //         }
+    //         ExprInner::If(cond, a, b) => ExprInner::If(
+    //             recurse(&cond).into(),
+    //             recurse(&a).into(),
+    //             recurse(&b).into(),
+    //         ),
+    //         ExprInner::Exp(k, a, b) => ExprInner::Exp(k, recurse(&a).into(), recurse(&b).into()),
+    //         ExprInner::Let(binds, i) => ExprInner::Let(
+    //             binds
+    //                 .iter()
+    //                 .map(|(var, val)| (*var, recurse(val).into()))
+    //                 .collect(),
+    //             recurse(&i).into(),
+    //         ),
+    //         ExprInner::Apply(f, args) => {
+    //             // we must monomorphize the function too
+    //             if mangled.get(&f).is_none() {
+    //                 let noo = recurse(&fun_defs.get(&f).unwrap().body);
+    //                 mangled.insert(
+    //                     f,
+    //                     FunDefn {
+    //                         name: f,
+    //                         args: fun_defs.get(&f).unwrap().args.clone(),
+    //                         body: noo,
+    //                     },
+    //                 );
+    //             }
+    //             ExprInner::Apply(f, args.iter().map(recurse).collect())
+    //         }
+    //         ExprInner::ApplyGeneric(f, tvars, args) => {
+    //             // generate a monomorphized version
+    //             let mangled_name = if tvars.is_empty() {
+    //                 f
+    //             } else {
+    //                 static MANGLE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    //                 Symbol::from(
+    //                     format!(
+    //                         "{:?}-mm{}",
+    //                         f,
+    //                         MANGLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    //                     )
+    //                     .as_str(),
+    //                 )
+    //             };
+    //             log::trace!("making up a mangled name {:?}!", mangled_name);
+    //             // if we have a monomorphized version already, we just call that.
+    //             // otherwise, we must populate the table now
+    //             if mangled.get(&mangled_name).is_none() {
+    //                 let unmangled_fundef = fun_defs.get(&f).cloned().unwrap();
+    //                 let noo = monomorphize_inner(
+    //                     fun_defs,
+    //                     &unmangled_fundef.body,
+    //                     mangled,
+    //                     &tvar_scope.clone().tap_mut(|tvs| {
+    //                         for (k, v) in tvars.iter() {
+    //                             tvs.insert(
+    //                                 *k,
+    //                                 v.fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
+    //                             );
+    //                         }
+    //                     }),
+    //                 );
+    //                 mangled.insert(
+    //                     mangled_name,
+    //                     FunDefn {
+    //                         name: mangled_name,
+    //                         args: unmangled_fundef.args,
+    //                         body: noo,
+    //                     },
+    //                 );
+    //             }
+    //             ExprInner::Apply(mangled_name, args.iter().map(recurse).collect())
+    //         }
+    //         ExprInner::LitNum(v) => ExprInner::LitNum(v),
+    //         ExprInner::LitVec(lv) => ExprInner::LitVec(lv.iter().map(recurse).collect()),
+    //         ExprInner::Var(v) => ExprInner::Var(v),
+    //         ExprInner::IsType(a, b) => {
+    //             ExprInner::IsType(a, b.fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()))
+    //         }
+    //         ExprInner::VectorRef(v, i) => {
+    //             ExprInner::VectorRef(recurse(&v).into(), recurse(&i).into())
+    //         }
+    //         ExprInner::VectorUpdate(v, i, n) => {
+    //             ExprInner::VectorUpdate(recurse(&v).into(), recurse(&i).into(), recurse(&n).into())
+    //         }
+    //         ExprInner::VectorSlice(v, i, j) => {
+    //             ExprInner::VectorSlice(recurse(&v).into(), recurse(&i).into(), recurse(&j).into())
+    //         }
+
+    //         ExprInner::Fail => ExprInner::Fail,
+    //         ExprInner::LitBytes(b) => ExprInner::LitBytes(b),
+    //         ExprInner::LitBVec(v) => ExprInner::LitBVec(v.iter().map(recurse).collect()),
+    //     },
+    //     itype: body
+    //         .itype
+    //         .fill_tvars(|t| tvar_scope.get(t).cloned().unwrap()),
+    // }
 }
 
 #[cfg(test)]
@@ -1014,7 +994,7 @@ mod tests {
     #[test]
     fn typecheck_simple() {
         init_logs();
-        let state: TypecheckState<Void> = TypecheckState::new();
+        let state: Scope<Void> = Scope::new();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:#?}",

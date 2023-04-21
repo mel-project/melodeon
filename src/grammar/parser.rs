@@ -1,4 +1,4 @@
-use std::{cell::Cell, collections::VecDeque, path::Path};
+use std::{cell::Cell, path::Path};
 
 use anyhow::Context;
 use bytes::Bytes;
@@ -132,7 +132,7 @@ fn parse_definition(pair: Pair<Rule>, source: ModuleId, root: &Path) -> Ctx<RawD
         Rule::require_lib => {
             let ctx = p2ctx(&pair, source);
             let children: Vec<_> = pair.into_inner().map(|p| p.as_str().to_string()).collect();
-            let lib_path = &root.join(&children.join("/"));
+            let lib_path = &root.join(children.join("/"));
             let root = ProjectRoot(root.to_path_buf());
             if !lib_path.exists() {
                 //println!("{:?}", RawDefn::Require(root.clone().module_from_root(&lib_path.with_extension("melo"))));
@@ -237,12 +237,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             let inner = parse_expr(pair.into_inner().next().unwrap(), source);
             RawExpr::Unsafe(inner).with_ctx(ctx)
         }
-        Rule::extern_expr => {
-            let inner = pair.into_inner().next().unwrap();
-            let ictx = p2ctx(&inner, source);
-            let inner = snailquote::unescape(inner.as_str()).unwrap();
-            RawExpr::Extern(inner.with_ctx(ictx)).with_ctx(ctx)
-        }
+
         Rule::if_expr => {
             let mut children = pair.into_inner().map(|c| parse_expr(c, source));
             let condition = children.next().unwrap();
@@ -350,18 +345,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                 toret
             }
         }
-        Rule::extern_call_expr => {
-            let mut children = pair.into_inner();
-            let fun_name = children.next().unwrap();
-            let fun_name = snailquote::unescape(fun_name.as_str())
-                .unwrap()
-                .with_ctx(p2ctx(&fun_name, source));
-            let mut args = List::new();
-            for arg in children.next().unwrap().into_inner() {
-                args.push(parse_expr(arg, source));
-            }
-            RawExpr::ExternApply(fun_name, args).with_ctx(ctx)
-        }
+
         Rule::apply_expr => {
             let mut children = pair.into_inner();
             let mut toret = parse_expr(children.next().unwrap(), source);

@@ -44,10 +44,14 @@ impl<TVar: Variable> Expr<TVar> {
                 binds.iter().map(|(s, b)| (*s, recurse(b).into())).collect(),
                 recurse(i).into(),
             ),
-            ExprInner::Apply(f, args) => ExprInner::Apply(*f, args.iter().map(recurse).collect()),
-            ExprInner::ApplyGeneric(f, tg, args) => {
-                ExprInner::ApplyGeneric(*f, tg.clone(), args.iter().map(recurse).collect())
+            ExprInner::Apply(f, args) => {
+                ExprInner::Apply(recurse(f).into(), args.iter().map(recurse).collect())
             }
+            ExprInner::ApplyGeneric(f, tg, args) => ExprInner::ApplyGeneric(
+                recurse(f).into(),
+                tg.clone(),
+                args.iter().map(recurse).collect(),
+            ),
             ExprInner::VectorRef(v, i) => {
                 ExprInner::VectorRef(recurse(v).into(), recurse(i).into())
             }
@@ -57,11 +61,7 @@ impl<TVar: Variable> Expr<TVar> {
             ExprInner::VectorSlice(v, i, j) => {
                 ExprInner::VectorSlice(recurse(v).into(), recurse(i).into(), recurse(j).into())
             }
-            ExprInner::Loop(count, sets, end) => ExprInner::Loop(
-                count.clone(),
-                sets.iter().map(|(a, b)| (*a, recurse(b))).collect(),
-                recurse(end).into(),
-            ),
+
             _ => self.inner.clone(),
         };
         let nova = Self {
@@ -81,21 +81,20 @@ pub enum ExprInner<TVar: Variable> {
     If(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
     //Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     Let(List<(Symbol, Arc<Expr<TVar>>)>, Arc<Expr<TVar>>),
-    Apply(Symbol, List<Expr<TVar>>),
-    ExternApply(String, List<Expr<TVar>>),
-    Extern(String),
-    ApplyGeneric(Symbol, Map<TVar, Type<TVar>>, List<Expr<TVar>>),
+    Apply(Arc<Expr<TVar>>, List<Expr<TVar>>),
+
+    ApplyGeneric(Arc<Expr<TVar>>, Map<TVar, Type<TVar>>, List<Expr<TVar>>),
     LitNum(U256),
     LitBytes(Bytes),
     LitBVec(List<Expr<TVar>>),
     LitVec(List<Expr<TVar>>),
-    LitConst(U256),
+
     Var(Symbol),
     IsType(Symbol, Type<TVar>),
     VectorRef(Arc<Expr<TVar>>, Arc<Expr<TVar>>),
     VectorUpdate(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
     VectorSlice(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
-    Loop(U256, List<(Symbol, Expr<TVar>)>, Arc<Expr<TVar>>),
+
     Fail,
 }
 

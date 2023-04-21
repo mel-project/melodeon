@@ -5,22 +5,21 @@ use crate::{
 
 use super::facts::TypeFacts;
 
-/// A purely-functional typechecking state.
+/// A purely-functional typechecking scope.
 #[derive(Debug, Clone, Default)]
-pub struct TypecheckState<TVar: Variable> {
+pub struct Scope<TVar: Variable> {
     variable_scope: Map<Symbol, Type<TVar>>,
     type_scope: Map<Symbol, Type<TVar>>,
-    function_scope: Map<Symbol, FunctionType<TVar>>,
     safety: bool,
 }
 
-impl<TVar: Variable> TypecheckState<TVar> {
+impl<TVar: Variable> Scope<TVar> {
     /// Creates an empty
     pub fn new() -> Self {
         Self {
             variable_scope: Map::new(),
             type_scope: Map::new(),
-            function_scope: Map::new(),
+
             safety: true,
         }
     }
@@ -45,12 +44,6 @@ impl<TVar: Variable> TypecheckState<TVar> {
         self
     }
 
-    /// Binds a function name.
-    pub fn bind_fun(mut self, name: Symbol, funtype: FunctionType<TVar>) -> Self {
-        self.function_scope.insert(name, funtype);
-        self
-    }
-
     /// Binds safety mode.
     pub fn bind_safety(mut self, safety: bool) -> Self {
         self.safety = safety;
@@ -70,11 +63,6 @@ impl<TVar: Variable> TypecheckState<TVar> {
     /// Looks up a type alias
     pub fn lookup_type_alias(&self, alias: Symbol) -> Option<Type<TVar>> {
         self.type_scope.get(&alias).cloned()
-    }
-
-    /// Looks up a function
-    pub fn lookup_fun(&self, name: Symbol) -> Option<FunctionType<TVar>> {
-        self.function_scope.get(&name).cloned()
     }
 
     pub fn var_scope(&self) -> Map<Symbol, Type<TVar>> {
@@ -97,11 +85,4 @@ impl<TVar: Variable> TypecheckState<TVar> {
         }
         self
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionType<TVar: Variable> {
-    pub free_vars: List<TVar>,
-    pub args: List<Type<TVar>>,
-    pub result: Type<TVar>,
 }

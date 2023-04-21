@@ -3,7 +3,7 @@ use crate::{
     typesys::{Type, Variable},
 };
 
-use super::state::TypecheckState;
+use super::scope::Scope;
 
 /// A carrier of information gleaned about the types of variables through occurrence-typing operators (`is` and such).
 #[derive(Clone, Debug)]
@@ -47,7 +47,7 @@ impl<Tv: Variable> TypeFacts<Tv> {
     }
 
     /// Negates the type facts, with respect to some type state.
-    pub fn negate_against(mut self, universe: &TypecheckState<Tv>) -> Self {
+    pub fn negate_against(mut self, universe: &Scope<Tv>) -> Self {
         let _pre = self.clone();
         self.mapping.iter_mut().for_each(|(k, b)| {
             if let Some(u) = universe.lookup_var(*k) {

@@ -37,14 +37,14 @@ impl Demodularizer {
                 let mid = mid.to_string();
                 if let Some(stripped) = mid.strip_prefix('$') {
                     let mut root = global_root.clone();
-                    root.push(&stripped);
+                    root.push(stripped);
                     log::debug!("reading library {:?}", root);
-                    Ok(std::fs::read_to_string(&Path::new(&format!(
+                    Ok(std::fs::read_to_string(Path::new(&format!(
                         "{}.melo",
                         root.to_string_lossy()
                     )))
                     .or_else(|_| {
-                        std::fs::read_to_string(&Path::new(&format!(
+                        std::fs::read_to_string(Path::new(&format!(
                             "{}/main.melo",
                             root.to_string_lossy()
                         )))
@@ -276,10 +276,6 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         RawExpr::LitBytes(b) => RawExpr::LitBytes(b),
         RawExpr::LitBVec(vv) => RawExpr::LitBVec(vv.into_iter().map(recurse).collect()),
         RawExpr::Unsafe(s) => RawExpr::Unsafe(recurse(s)),
-        RawExpr::Extern(s) => RawExpr::Extern(s),
-        RawExpr::ExternApply(f, args) => {
-            RawExpr::ExternApply(f, args.into_iter().map(recurse).collect())
-        }
     }
     .with_ctx(ctx)
 }

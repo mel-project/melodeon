@@ -1,407 +1,153 @@
-use std::ops::Deref;
+use std::sync::Arc;
 
 use crate::{
     containers::Symbol,
-    typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program, UniOp},
+    typed_ast::{BinOp, Expr, ExprInner, Program, UniOp},
     typesys::Type,
 };
 use ethnum::U256;
-use lexpr::Value;
+
+use melvm::opcode::OpCode;
+use serde::{Deserialize, Serialize};
+
+/// The final intermediate representation that can be quickly translated into MelVM instructions.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum Ir {
+    Op(OpCode, Arc<Vec<Ir>>),
+    Call(Arc<Ir>, Arc<Vec<Ir>>),
+    Bind(imbl::HashMap<Symbol, Ir>, Arc<Ir>),
+    LitNum(U256),
+    Lambda(Vec<Symbol>, Arc<Ir>),
+    LitVar(Symbol),
+    VEmpty,
+    BEmpty,
+}
 
 /// Generates Mil code (in s-expression format) by traversing a fully monomorphized Program.
-pub fn codegen_program(prog: Program) -> String {
+pub fn codegen_program(prog: Program) -> Ir {
     log::debug!(
         "generating code for program with {} monomorphized definitions",
         prog.fun_defs.len()
     );
-    prog.fun_defs
+    let toplevel_bindings = prog
+        .fun_defs
         .iter()
-        .map(codegen_fundef)
-        .chain(std::iter::once(codegen_expr(&prog.body)))
-        .fold(String::new(), |mut a, b| {
-            a.push_str(&sexpr_pretty(&b));
-            a.push('\n');
-            a
+        .map(|fdef| {
+            let body = codegen_expr(&fdef.body);
+            (fdef.name, Ir::Lambda(fdef.args.clone(), Arc::new(body)))
         })
+        .fold(imbl::HashMap::new(), |mut h, (k, v)| {
+            h.insert(k, v);
+            h
+        });
+    Ir::Bind(toplevel_bindings, codegen_expr(&prog.body).into())
 }
 
-/// Trivial pretty-printer for an s-expression
-fn sexpr_pretty(v: &Value) -> String {
-    let unpretty = v.to_string();
-    if unpretty.len() < 50 {
-        return unpretty;
-    }
-    if let Some(mut inner) = v.list_iter() {
-        let form_name = inner.next().unwrap().to_string();
-        let mut accum = format!("({}", form_name);
-        for inner in inner {
-            let inner_str = sexpr_pretty(inner);
-            for line in inner_str.lines() {
-                if accum.len() > 10 {
-                    accum.push('\n');
-                }
-                accum.push(' ');
-                accum.push_str(line)
-            }
-        }
-        accum.push(')');
-        accum
-    } else {
-        unpretty
-    }
-}
-
-fn codegen_fundef(fdef: &FunDefn) -> Value {
-    [
-        Value::symbol("fn"),
-        Value::symbol(fdef.name.to_string()),
-        fdef.args
-            .iter()
-            .map(|s| Value::symbol(s.to_string()))
-            .sexpr(),
-        codegen_expr(&fdef.body),
-    ]
-    .sexpr()
-}
-
-fn codegen_expr(expr: &Expr) -> Value {
+fn codegen_expr(expr: &Expr) -> Ir {
     match &expr.inner {
-        ExprInner::BinOp(BinOp::Eq, x, y) => {
-            let x_temp = Symbol::generate("@if");
-            let y_temp = Symbol::generate("@if");
-            [
-                Value::symbol("let"),
-                [
-                    Value::symbol(x_temp.to_string()),
-                    codegen_expr(x),
-                    Value::symbol(y_temp.to_string()),
-                    codegen_expr(y),
-                ]
-                .sexpr(),
-                generate_eq_check(
-                    if x.itype.subtype_of(&y.itype) {
-                        &y.itype
-                    } else {
-                        &x.itype
-                    },
-                    Value::symbol(x_temp.to_string()),
-                    Value::symbol(y_temp.to_string()),
-                ),
-            ]
-            .sexpr()
+        ExprInner::BinOp(BinOp::Eq, _x, _y) => {
+            todo!()
         }
         ExprInner::UniOp(op, x) => {
             let op = match op {
-                UniOp::Bnot => Value::symbol("not"),
+                UniOp::Bnot => OpCode::Not,
             };
             let x = codegen_expr(x);
-            [op, x].sexpr()
+            Ir::Op(op, vec![x].into())
         }
         ExprInner::BinOp(op, x, y) => {
             let op = match op {
-                BinOp::Add => Value::symbol("+"),
-                BinOp::Sub => Value::symbol("-"),
-                BinOp::Mul => Value::symbol("*"),
-                BinOp::Div => Value::symbol("/"),
-                BinOp::Mod => Value::symbol("%"),
+                BinOp::Add => OpCode::Add,
+                BinOp::Sub => OpCode::Sub,
+                BinOp::Mul => OpCode::Mul,
+                BinOp::Div => OpCode::Div,
+                BinOp::Mod => OpCode::Rem,
                 BinOp::Append => {
                     if x.itype.deunionize().any(|f| matches!(f, Type::DynBytes)) {
-                        Value::symbol("b-concat")
+                        OpCode::BAppend
+                    } else if x
+                        .itype
+                        .deunionize()
+                        .any(|f| matches!(f, Type::DynVectorof(_)))
+                    {
+                        OpCode::VAppend
                     } else {
-                        Value::symbol("v-concat")
+                        todo!("dynamic dispatch for appends")
                     }
                 }
-                BinOp::Eq => unreachable!(),
-                BinOp::Lt => Value::symbol("<"),
-                BinOp::Le => Value::symbol("<="),
-                BinOp::Gt => Value::symbol(">"),
-                BinOp::Ge => Value::symbol(">="),
-                BinOp::Bor => Value::symbol("or"),
-                BinOp::Band => Value::symbol("and"),
-                BinOp::Bxor => Value::symbol("xor"),
-                BinOp::Lshift => Value::symbol("<<"),
-                BinOp::Rshift => Value::symbol(">>"),
+                BinOp::Eq => todo!("dynamic dispatch for equality"),
+                BinOp::Lt => OpCode::Lt,
+                BinOp::Le => todo!("dynamic dispatch for <="),
+                BinOp::Gt => OpCode::Gt,
+                BinOp::Ge => todo!("dynamic dispatch for >="),
+                BinOp::Bor => OpCode::Or,
+                BinOp::Band => OpCode::And,
+                BinOp::Bxor => OpCode::Xor,
+                BinOp::Lshift => OpCode::Shl,
+                BinOp::Rshift => OpCode::Shr,
             };
             let x = codegen_expr(x);
             let y = codegen_expr(y);
-            [op, x, y].sexpr()
+            Ir::Op(op, vec![x, y].into())
         }
-        ExprInner::Exp(k, base, exp) => [
-            Value::symbol("**"),
-            // TODO do something a little more intelligent here
-            Value::Number(255.into()),
-            codegen_expr(base),
-            codegen_expr(exp),
-        ]
-        .sexpr(),
-        ExprInner::If(a, b, c) => [
-            Value::symbol("if"),
-            codegen_expr(a),
-            codegen_expr(b),
-            codegen_expr(c),
-        ]
-        .sexpr(),
-        ExprInner::Let(binds, i) => [
-            Value::symbol("let"),
-            binds
-                .iter()
-                .fold(vec![], |acc, (var, val)| {
-                    [acc, vec![Value::symbol(var.to_string()), codegen_expr(val)]].concat()
-                })
-                .sexpr(),
-            codegen_expr(i),
-        ]
-        .sexpr(),
-        ExprInner::Apply(f, vec) => std::iter::once(Value::symbol(f.to_string()))
-            .chain(vec.iter().map(codegen_expr))
-            .sexpr(),
-        ExprInner::ApplyGeneric(_, _, _) => todo!(),
-        ExprInner::LitNum(num) => {
-            // lexpr does not support u64, so we desugar to smaller numbers
-            u256_to_sexpr(*num)
+        ExprInner::Exp(_k, base, exp) => {
+            let x = codegen_expr(base);
+            let y = codegen_expr(exp);
+            Ir::Op(OpCode::Exp(255), vec![x, y].into())
         }
-        ExprInner::LitVec(vec) => std::iter::once(Value::symbol("vector"))
-            .chain(vec.iter().map(codegen_expr))
-            .sexpr(),
-        ExprInner::LitBVec(vec) => std::iter::once(Value::symbol("bytes"))
-            .chain(vec.iter().map(codegen_expr))
-            .sexpr(),
-        ExprInner::LitConst(_) => unreachable!(),
-        ExprInner::Var(v) => Value::symbol(v.to_string()),
-        ExprInner::IsType(a, t) => generate_type_check(t, Value::symbol(a.to_string())),
-        ExprInner::VectorRef(v, i) => [
-            if v.itype.deunionize().any(|f| matches!(f, Type::DynBytes)) {
-                Value::symbol("b-get")
-            } else {
-                Value::symbol("v-get")
-            },
-            codegen_expr(v),
-            codegen_expr(i),
-        ]
-        .sexpr(),
-        ExprInner::VectorUpdate(v, i, n) => [
-            Value::symbol("v-from"),
-            codegen_expr(v),
-            codegen_expr(i),
-            codegen_expr(n),
-        ]
-        .sexpr(),
-        ExprInner::VectorSlice(v, i, j) => [
-            Value::symbol("v-slice"),
-            codegen_expr(v),
-            codegen_expr(i),
-            codegen_expr(j),
-        ]
-        .sexpr(),
-        ExprInner::Loop(n, bod, res) => [
-            Value::symbol("let"),
-            [].sexpr(),
-            [
-                Value::symbol("loop"),
-                Value::Number(n.as_u64().into()),
-                [Value::symbol("set-let"), [].sexpr()]
-                    .into_iter()
-                    .chain(bod.iter().map(|(s, x)| {
-                        [
-                            Value::symbol("set!"),
-                            Value::symbol(s.to_string()),
-                            codegen_expr(x),
-                        ]
-                        .sexpr()
-                    }))
-                    .sexpr(),
-            ]
-            .sexpr(),
-            codegen_expr(res),
-        ]
-        .sexpr(),
-        ExprInner::Fail => Value::symbol("fail!"),
-        ExprInner::LitBytes(b) => {
-            if b.is_empty() {
-                Value::symbol("\"\"")
-            } else {
-                Value::symbol(format!("0x{}", hex::encode(&b)))
-            }
+        ExprInner::If(_a, _b, _c) => todo!("if expression not impl"),
+        ExprInner::Let(binds, inner) => {
+            let inner = codegen_expr(inner);
+            Ir::Bind(
+                binds
+                    .iter()
+                    .map(|(sym, expr)| (*sym, codegen_expr(expr)))
+                    .collect(),
+                Arc::new(inner),
+            )
         }
-        ExprInner::ExternApply(f, args) => std::iter::once(Value::symbol(f.as_str()))
-            .chain(args.iter().map(codegen_expr))
-            .sexpr(),
-        ExprInner::Extern(s) => Value::symbol(s.clone()),
-    }
-}
-
-fn generate_eq_check(t: &Type, left_expr: Value, right_expr: Value) -> Value {
-    match t {
-        Type::Nothing => Value::Number(1.into()),
-        Type::Any => Value::Number(0.into()),
-        Type::Var(_) => unreachable!(),
-        Type::Nat => todo!(),
-        Type::Vector(v) => v
-            .iter()
-            .enumerate()
-            .map(|(i, t)| {
-                generate_eq_check(
-                    t,
-                    [
-                        Value::symbol("v-get"),
-                        left_expr.clone(),
-                        Value::Number((i as u64).into()),
-                    ]
-                    .sexpr(),
-                    [
-                        Value::symbol("v-get"),
-                        right_expr.clone(),
-                        Value::Number((i as u64).into()),
-                    ]
-                    .sexpr(),
-                )
-            })
-            .fold(Value::Number(1_u64.into()), |a, b| {
-                [Value::symbol("and"), a, b].sexpr()
-            }),
-
-        Type::Struct(_, _) => todo!(),
-        Type::Union(t, u) => {
-            let both_t = [
-                Value::symbol("and"),
-                generate_type_check(t, left_expr.clone()),
-                generate_type_check(t, right_expr.clone()),
-            ]
-            .sexpr();
-            let both_u = [
-                Value::symbol("and"),
-                generate_type_check(u, left_expr.clone()),
-                generate_type_check(u, right_expr.clone()),
-            ]
-            .sexpr();
-            [
-                Value::symbol("or"),
-                [
-                    Value::symbol("and"),
-                    both_t,
-                    generate_eq_check(t, left_expr.clone(), right_expr.clone()),
-                ]
-                .sexpr(),
-                [
-                    Value::symbol("and"),
-                    both_u,
-                    generate_eq_check(t, left_expr, right_expr),
-                ]
-                .sexpr(),
-            ]
-            .sexpr()
-        }
-        Type::DynVectorof(_) => todo!(),
-        Type::DynBytes => todo!(),
-    }
-}
-
-fn u256_to_sexpr(num: U256) -> Value {
-    // lexpr does not support u64, so we desugar to smaller numbers
-    if num > U256::from(u64::MAX) {
-        let divisor = U256::from(1u64 << 32);
-        let inner = codegen_expr(&Expr {
-            itype: Type::Any,
-            inner: ExprInner::LitNum(num / divisor),
-        });
-        [
-            Value::symbol("+"),
-            Value::Number((num % divisor).as_u64().into()),
-            [
-                Value::symbol("*"),
-                Value::Number(divisor.as_u64().into()),
-                inner,
-            ]
-            .sexpr(),
-        ]
-        .sexpr()
-    } else {
-        Value::Number(num.as_u64().into())
-    }
-}
-
-fn generate_type_check(t: &Type, inner: Value) -> Value {
-    match t {
-        Type::Nothing => Value::Number(0.into()),
-        Type::Any => Value::Number(1.into()),
-        Type::Var(_) => unreachable!(),
-        Type::Nat => todo!(),
-        Type::Vector(inners) => {
-            let is_vector_expr = [
-                Value::symbol("="),
-                Value::Number(2.into()),
-                [Value::symbol("typeof"), inner.clone()].sexpr(),
-            ]
-            .sexpr();
-            let length_correct_expr = [
-                Value::symbol("="),
-                Value::Number((inners.len() as u64).into()),
-                [Value::symbol("v-len"), inner.clone()].sexpr(),
-            ]
-            .sexpr();
-            inners
-                .iter()
-                .enumerate()
-                .map(|(idx, t)| {
-                    generate_type_check(
-                        t,
-                        [
-                            Value::symbol("v-get"),
-                            inner.clone(),
-                            Value::Number((idx as u64).into()),
-                        ]
-                        .sexpr(),
-                    )
-                })
-                .fold(
-                    [
-                        Value::symbol("if"),
-                        is_vector_expr,
-                        length_correct_expr,
-                        Value::Number(0.into()),
-                    ]
-                    .sexpr(),
-                    |a, b| [Value::symbol("if"), a, b, Value::Number(0.into())].sexpr(),
-                )
-        }
-
-        Type::Struct(_, v) => generate_type_check(
-            &Type::Vector(v.iter().map(|t| t.1.clone()).collect()),
-            inner,
+        ExprInner::Apply(f, vec) => Ir::Call(
+            Arc::new(codegen_expr(f)),
+            Arc::new(vec.iter().map(codegen_expr).collect()),
         ),
-        Type::Union(t, u) => {
-            let t_check = generate_type_check(t, inner.clone());
-            let u_check = generate_type_check(u, inner);
-            [Value::symbol("or"), t_check, u_check].sexpr()
+        ExprInner::ApplyGeneric(_, _, _) => unreachable!(),
+        ExprInner::LitNum(num) => Ir::LitNum(*num),
+        ExprInner::LitVec(vec) => vec.iter().fold(Ir::VEmpty, |v, a| {
+            Ir::Op(OpCode::VPush, vec![v, codegen_expr(a)].into())
+        }),
+        ExprInner::LitBVec(_vec) => todo!("byte strings not supported yet"),
+
+        ExprInner::Var(v) => Ir::LitVar(*v),
+        ExprInner::IsType(_a, _t) => todo!("is not supported yet"),
+        ExprInner::VectorRef(v, i) => Ir::Op(
+            if v.itype.deunionize().any(|f| matches!(f, Type::DynBytes)) {
+                OpCode::BRef
+            } else if v
+                .itype
+                .deunionize()
+                .any(|f| matches!(f, Type::DynVectorof(_)))
+            {
+                OpCode::VRef
+            } else {
+                todo!("dynamic dispatch for vector ref")
+            },
+            vec![codegen_expr(v), codegen_expr(i)].into(),
+        ),
+        ExprInner::VectorUpdate(_v, i, n) => {
+            Ir::Op(OpCode::VSet, vec![codegen_expr(i), codegen_expr(n)].into())
         }
-        Type::DynVectorof(_) => panic!("is expressions on dynamic vectors not yet supported"),
+        ExprInner::VectorSlice(_v, i, j) => Ir::Op(
+            OpCode::VSlice,
+            vec![codegen_expr(i), codegen_expr(j)].into(),
+        ),
 
-        Type::DynBytes => [
-            Value::symbol("="),
-            Value::Number(1.into()),
-            [Value::symbol("typeof"), inner].sexpr(),
-        ]
-        .sexpr(),
-    }
-}
-
-trait ToSexpr {
-    fn sexpr(self) -> Value;
-}
-
-impl<T: IntoIterator<Item = lexpr::Value>> ToSexpr for T {
-    fn sexpr(self) -> Value {
-        collect_sexpr(self.into_iter())
-    }
-}
-
-fn collect_sexpr(mut i: impl Iterator<Item = lexpr::Value>) -> lexpr::Value {
-    match i.next() {
-        Some(head) => {
-            let tail = collect_sexpr(i);
-            lexpr::Cons::new(head, tail).into()
-        }
-        None => lexpr::Value::Null,
+        ExprInner::Fail => todo!("fail not implemented"),
+        ExprInner::LitBytes(b) => b.iter().fold(Ir::BEmpty, |v, a| {
+            Ir::Op(
+                OpCode::BPush,
+                vec![v, Ir::LitNum((*a as u64).into())].into(),
+            )
+        }),
     }
 }
 
@@ -428,7 +174,7 @@ mod tests {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
-            "{}",
+            "{:?}",
             codegen_program(
                 typecheck_program(
                     parse_program(
@@ -450,12 +196,12 @@ mod tests {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
-            "{}",
+            "{:?}",
             codegen_program(
                 typecheck_program(
                     parse_program(
                         r"
-                        2**5
+                        let x = 5 in (2**5) + x
                         ",
                         module,
                         &std::path::PathBuf::from(""),
@@ -472,7 +218,7 @@ mod tests {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
-            "{}",
+            "{:?}",
             codegen_program(
                 typecheck_program(
                     parse_program(
@@ -504,7 +250,7 @@ mod tests {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
-            "{}",
+            "{:?}",
             codegen_program(
                 typecheck_program(
                     parse_program(
@@ -533,7 +279,7 @@ mod tests {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
-            "{}",
+            "{:?}",
             codegen_program(
                 typecheck_program(
                     parse_program(
@@ -555,7 +301,7 @@ mod tests {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
-            "{}",
+            "{:?}",
             codegen_program(
                 typecheck_program(
                     parse_program(

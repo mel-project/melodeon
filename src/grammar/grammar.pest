@@ -70,6 +70,7 @@ alias   = { "type" ~ type_name ~ "=" ~ type_expr }
 type_expr = _{
     type_union
 }
+
 type_union = { (type_qmark | type_terminal) ~ ("|" ~ (type_qmark | type_terminal))* }
 type_qmark = { type_terminal ~ "?"}
 type_terminal = _{
@@ -77,12 +78,15 @@ type_terminal = _{
     type_dynvectorof	    |
     type_name               |
     type_dynbytes           |
+    type_lambda             |
 
     "(" ~ type_expr ~ ")"  
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" } 
 type_dynvectorof = { "[" ~ type_expr ~ ";" ~ "]" }
 type_dynbytes = {"%[" ~ "]" }
+type_lambda = { "(" ~ (type_expr ~ ",")* ~ type_expr? ~ ")" ~ "->" ~ type_expr }
+
 
 
 // expression
@@ -161,6 +165,7 @@ terminal_expr   = _{
     struct_literal |
     for_literal |
     cflow_expr |
+    lambda_expr |
     "(" ~ expr ~ ")"
 }
 is_type     	    = { var_name ~ "is" ~ type_expr }
@@ -172,3 +177,4 @@ for_literal	        = { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
 extern_expr		    = { "extern" ~ string_literal }
 extern_call_expr    = { "extern" ~ "call" ~ string_literal ~ call_args }
 unsafe_expr         = { "unsafe" ~ expr }
+lambda_expr = { "(" ~ (var_name ~ ",")* ~ var_name? ~ ")" ~ "->" ~ expr}

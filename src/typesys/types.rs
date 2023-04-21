@@ -41,6 +41,11 @@ pub enum Type<T = Void> {
     DynBytes,
     Struct(Symbol, List<(Symbol, Self)>),
     Union(Arc<Self>, Arc<Self>),
+    Lambda {
+        free_vars: List<T>,
+        args: List<Self>,
+        result: Arc<Self>,
+    },
 }
 
 impl<T: Variable> Debug for Type<T> {
@@ -57,16 +62,29 @@ impl<T: Variable> Debug for Type<T> {
             Type::DynVectorof(t) => std::fmt::Display::fmt(&format!("[{:?};]", t), f),
 
             Type::DynBytes => std::fmt::Display::fmt("%[]", f),
+
+            Type::Lambda {
+                free_vars: _,
+                args,
+                result,
+            } => {
+                let free_vars = args
+                    .iter()
+                    .map(|a| format!("{:?}", a))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let arg_frag = args
+                    .iter()
+                    .map(|a| format!("{:?}", a))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("<{free_vars}>({arg_frag}) -> {:?}", result).fmt(f)
+            }
         }
     }
 }
 
 impl<TVar: Variable> Type<TVar> {
-    /// Checks whether this type is always "falsy".
-    pub fn always_falsy(&self) -> bool {
-        todo!()
-    }
-
     /// Equivalence relation. Returns true iff `self` and `other` are subtypes of each other.
     pub fn equiv_to(&self, other: &Self) -> bool {
         self.subtype_of(other) && other.subtype_of(other)
@@ -155,6 +173,24 @@ impl<TVar: Variable> Type<TVar> {
             (Type::Nat, Type::Nat) => true,
             (Type::Nat, Type::Union(a, b)) => self.subtype_of(a) || self.subtype_of(b),
             (Type::Nat, _) => false,
+            (
+                Type::Lambda {
+                    free_vars: _fv1,
+                    args: a1,
+                    result: r1,
+                },
+                Type::Lambda {
+                    free_vars: _fv2,
+                    args: a2,
+                    result: r2,
+                },
+            ) => {
+                // the arity is the same, the arguments are looser, and the result is tighter
+                a1.len() == a2.len()
+                    && a1.iter().zip(a2.iter()).all(|(a, b)| b.subtype_of(a))
+                    && r1.subtype_of(r2)
+            }
+            (Type::Lambda { .. }, _) => false,
         }
     }
 
@@ -214,7 +250,12 @@ impl<TVar: Variable> Type<TVar> {
             }
 
             Type::DynBytes => Cow::Borrowed(self),
-            Type::Nat => todo!(),
+            Type::Nat => Cow::Borrowed(self),
+            Type::Lambda {
+                free_vars: _,
+                args: _,
+                result: _,
+            } => Cow::Borrowed(self),
         }
     }
 
@@ -235,8 +276,8 @@ impl<TVar: Variable> Type<TVar> {
                     .into_iter()
                     .fold(Some(Type::Nothing), |accum, elem| {
                         let accum = accum?;
-                        let mut ptr = other.clone();
-                        for elem in elem {
+                        let ptr = other.clone();
+                        for _elem in elem {
                             todo!()
                         }
                         Some(accum.smart_union(&ptr))
@@ -256,47 +297,6 @@ impl<TVar: Variable> Type<TVar> {
             self.clone()
         } else {
             Type::Union(self.clone().into(), other.clone().into())
-        }
-    }
-
-    /// Returns the set of all locations where constant-generic parameters appear.
-    fn cvar_locations(&self) -> Set<List<Option<usize>>> {
-        match self {
-            Type::Nothing => Set::new(),
-            Type::Any => Set::new(),
-            Type::Var(_) => Set::new(),
-
-            Type::Vector(elems) => elems
-                .iter()
-                .map(|elem| elem.cvar_locations())
-                .enumerate()
-                .fold(Set::new(), |accum, (idx, inner_locations)| {
-                    accum.union(
-                        inner_locations
-                            .into_iter()
-                            .map(|mut v| {
-                                v.insert(0, Some(idx));
-                                v
-                            })
-                            .collect(),
-                    )
-                }),
-
-            Type::Struct(_, i) => {
-                Type::Vector(i.iter().map(|a| a.1.clone()).collect()).cvar_locations()
-            }
-            Type::Union(t, u) => t.cvar_locations().union(u.cvar_locations()),
-            Type::DynVectorof(t) => t
-                .cvar_locations()
-                .into_iter()
-                .map(|mut loc| {
-                    loc.insert(0, None);
-                    loc
-                })
-                .collect(),
-
-            Type::DynBytes => Set::new(),
-            Type::Nat => todo!(),
         }
     }
 
@@ -387,6 +387,11 @@ impl<TVar: Variable> Type<TVar> {
             }
 
             Type::DynBytes => Some(Type::DynBytes),
+            Type::Lambda {
+                free_vars: _,
+                args: _,
+                result: _,
+            } => todo!(),
         }
     }
 
@@ -417,7 +422,6 @@ impl<TVar: Variable> Type<TVar> {
 mod tests {
     use log::LevelFilter;
 
-    use super::*;
     #[test]
 
     fn init_logs() {

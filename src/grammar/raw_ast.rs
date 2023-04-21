@@ -84,8 +84,6 @@ pub enum RawExpr {
     Transmute(Ctx<Self>, Ctx<RawTypeExpr>),
 
     Unsafe(Ctx<Self>),
-    Extern(Ctx<String>),
-    ExternApply(Ctx<String>, List<Ctx<Self>>),
 }
 
 /// Unary operator
@@ -287,9 +285,5 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::AsType(a, t) | RawExpr::Transmute(a, t) => rec(a).union(typebind_parents(t)),
         RawExpr::LitBytes(_) => Set::new(),
         RawExpr::Unsafe(s) => rec(s),
-        RawExpr::Extern(_) => Set::new(),
-        RawExpr::ExternApply(_, args) => {
-            args.iter().fold(Set::new(), |acc, arg| acc.union(rec(arg)))
-        }
     }
 }
