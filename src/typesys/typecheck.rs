@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Deref};
+use std::{ops::Deref};
 
 use anyhow::Context;
 
@@ -10,7 +10,7 @@ use crate::{
     context::{Ctx, CtxErr, CtxLocation, CtxResult, ToCtx, ToCtxErr},
     grammar::{RawDefn, RawExpr, RawProgram, RawTypeExpr},
     typed_ast::{BinOp, Expr, ExprInner, FunDefn, Program, UniOp},
-    typesys::{Type, Variable},
+    typesys::Type,
 };
 
 use self::{facts::TypeFacts, scope::Scope};
@@ -19,47 +19,7 @@ mod facts;
 
 mod scope;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct TypeParam(Symbol);
-
-impl Debug for TypeParam {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Variable for TypeParam {
-    fn try_from_sym(sym: Symbol) -> Option<Self> {
-        Some(Self(sym))
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct CgParam(Symbol);
-
-impl Debug for CgParam {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Variable for CgParam {
-    fn try_from_sym(s: Symbol) -> Option<Self> {
-        Some(Self(s))
-    }
-}
-
-impl Variable for i32 {
-    fn try_from_sym(_: Symbol) -> Option<Self> {
-        panic!("cannot work")
-    }
-}
-
-fn assert_subtype<Tv: Variable>(
-    ctx: Option<CtxLocation>,
-    a: &Type<Tv>,
-    b: &Type<Tv>,
-) -> CtxResult<()> {
+fn assert_subtype(ctx: Option<CtxLocation>, a: &Type, b: &Type) -> CtxResult<()> {
     if !a.subtype_of(b) {
         Err(anyhow::anyhow!("expected a subtype of {:?}, got {:?} instead", b, a).with_ctx(ctx))
     } else {
@@ -97,10 +57,9 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                     body: _,
                 } = defn.deref()
                 {
-                    let istate: Scope<TypeParam> =
-                        genvars.iter().fold(state.clone(), |state, sym| {
-                            state.bind_type_alias(**sym, Type::Var(TypeParam(**sym)))
-                        });
+                    let istate: Scope = genvars.iter().fold(state.clone(), |state, sym| {
+                        state.bind_type_alias(**sym, Type::Var(**sym))
+                    });
                     let rettype = typecheck_type_expr(
                         &istate,
                         rettype
@@ -109,7 +68,7 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                     )?;
 
                     let funtype = Type::Lambda {
-                        free_vars: genvars.iter().map(|gv| TypeParam(**gv)).collect(),
+                        free_vars: genvars.iter().map(|gv| **gv).collect(),
                         args: args
                             .iter()
                             .map(|bind| typecheck_type_expr(&istate, bind.bind.clone()))
@@ -125,7 +84,7 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
 
     // build the typecheck scope
     let mut scope = provisional_toplevel_scope;
-    let mut fun_defs: List<FunDefn<TypeParam>> = List::new();
+    let mut fun_defs: List<FunDefn> = List::new();
     for definition in raw.definitions.iter() {
         match definition.deref() {
             crate::grammar::RawDefn::Function {
@@ -136,8 +95,8 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                 body,
             } => {
                 // bind the type variables, then the CG-variables
-                let istate: Scope<TypeParam> = genvars.iter().fold(scope.clone(), |state, sym| {
-                    state.bind_type_alias(**sym, Type::Var(TypeParam(**sym)))
+                let istate: Scope = genvars.iter().fold(scope.clone(), |state, sym| {
+                    state.bind_type_alias(**sym, Type::Var(**sym))
                 });
 
                 // now also bind the argument types
@@ -166,7 +125,7 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
                     body.itype.clone()
                 };
                 let fun_info = Type::Lambda {
-                    free_vars: genvars.iter().map(|c| TypeParam(**c)).collect(),
+                    free_vars: genvars.iter().map(|c| **c).collect(),
                     args: args
                         .iter()
                         .map(|s| istate.lookup_var(*s.name).unwrap())
@@ -218,15 +177,12 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
 }
 
 /// Typechecks a single expression, returning a single typed ast node.
-pub fn typecheck_expr<Tv: Variable>(
-    state: Scope<Tv>,
-    raw: Ctx<RawExpr>,
-) -> CtxResult<(Expr<Tv>, TypeFacts<Tv>)> {
+pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeFacts)> {
     let recurse = |c| typecheck_expr(state.clone(), c);
     let ctx = raw.ctx();
     match raw.deref().clone() {
         RawExpr::Let(binds, body) => {
-            let mut checked_binds: List<(Symbol, Expr<Tv>)> = List::new();
+            let mut checked_binds: List<(Symbol, Expr)> = List::new();
             let mut final_state = state.clone();
             for (var, val) in binds.into_iter() {
                 let checked_val = typecheck_expr(final_state.clone(), val)?;
@@ -552,14 +508,13 @@ pub fn typecheck_expr<Tv: Variable>(
 
                     // override with the things in the explicit turbofish
                     for (k, v) in tvars {
-                        let k = Tv::try_from_sym(k).expect("wtf");
                         let v = typecheck_type_expr(&state, v)?;
                         generic_mapping.insert(k, v);
                     }
 
                     for (arg, required_type) in typechecked_args.iter().zip(args.iter()) {
                         let required_type = required_type
-                            .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())
+                            .try_fill_tvars(|tv| generic_mapping.get(&tv).cloned())
                             .context(format!(
                                 "cannot fill type variables in argument type {:?}, given concrete {:?}",
                                 required_type,
@@ -578,7 +533,7 @@ pub fn typecheck_expr<Tv: Variable>(
                     Ok((
                         Expr {
                             itype: result
-                                .try_fill_tvars(|tv| generic_mapping.get(tv).cloned())
+                                .try_fill_tvars(|tv| generic_mapping.get(&tv).cloned())
                                 .context(format!(
                                     "cannot fill type variables in result type {:?}",
                                     result
@@ -801,7 +756,7 @@ pub fn typecheck_expr<Tv: Variable>(
     }
 }
 
-fn type_vector_ref<Tv: Variable>(vtype: &Type<Tv>, itype: &Type<Tv>) -> anyhow::Result<Type<Tv>> {
+fn type_vector_ref(vtype: &Type, itype: &Type) -> anyhow::Result<Type> {
     if !itype.subtype_of(&Type::Nat) {
         anyhow::bail!("vector index not a Nat")
     }
@@ -817,10 +772,7 @@ fn type_vector_ref<Tv: Variable>(vtype: &Type<Tv>, itype: &Type<Tv>) -> anyhow::
     }
 }
 
-fn typecheck_type_expr<Tv: Variable>(
-    state: &Scope<Tv>,
-    raw: Ctx<RawTypeExpr>,
-) -> CtxResult<Type<Tv>> {
+fn typecheck_type_expr(state: &Scope, raw: Ctx<RawTypeExpr>) -> CtxResult<Type> {
     match raw.deref().clone() {
         RawTypeExpr::Sym(s) => {
             if s == Symbol::from("Nat") {
@@ -857,7 +809,7 @@ fn typecheck_type_expr<Tv: Variable>(
 }
 
 /// Type-erases a set of function definitions and a "preliminary" body into a fully degenericized version.
-pub fn erase_types(fun_defs: List<FunDefn<TypeParam>>, body: Expr<TypeParam>) -> Program {
+pub fn erase_types(fun_defs: List<FunDefn>, body: Expr) -> Program {
     Program {
         fun_defs: fun_defs
             .into_iter()
@@ -874,7 +826,7 @@ pub fn erase_types(fun_defs: List<FunDefn<TypeParam>>, body: Expr<TypeParam>) ->
     }
 }
 
-fn erase_types_inner(expr: &Expr<TypeParam>) -> Expr {
+fn erase_types_inner(expr: &Expr) -> Expr {
     let Expr { inner, itype } = expr;
     let new_itype: Type = itype.fill_tvars(|_| Type::Any);
     let new_inner = match inner {
@@ -944,12 +896,12 @@ mod tests {
     use log::LevelFilter;
 
     use super::*;
-    use crate::{containers::Void, context::ModuleId, grammar::parse_program};
+    use crate::{context::ModuleId, grammar::parse_program};
 
     #[test]
     fn typecheck_simple() {
         init_logs();
-        let state: Scope<Void> = Scope::new();
+        let state = Scope::new();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:#?}",

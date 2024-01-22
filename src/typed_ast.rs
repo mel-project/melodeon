@@ -3,9 +3,9 @@ use std::sync::Arc;
 use bytes::Bytes;
 use ethnum::U256;
 
-use crate::containers::{List, Map, Symbol, Void};
+use crate::containers::{List, Map, Symbol};
 
-use crate::typesys::{Type, Variable};
+use crate::typesys::Type;
 
 #[derive(Debug, Clone)]
 pub struct Program {
@@ -14,20 +14,20 @@ pub struct Program {
 }
 
 #[derive(Debug, Clone)]
-pub struct FunDefn<TVar: Variable = Void> {
+pub struct FunDefn {
     pub name: Symbol,
     pub args: List<Symbol>,
-    pub body: Expr<TVar>,
+    pub body: Expr,
 }
 
 #[derive(Debug, Clone)]
-pub struct Expr<TVar: Variable = Void> {
-    pub itype: Type<TVar>,
-    pub inner: ExprInner<TVar>,
+pub struct Expr {
+    pub itype: Type,
+    pub inner: ExprInner,
 }
 
-impl<TVar: Variable> Expr<TVar> {
-    pub fn new(itype: Type<TVar>, inner: ExprInner<TVar>) -> Self {
+impl Expr {
+    pub fn new(itype: Type, inner: ExprInner) -> Self {
         Self { itype, inner }
     }
 
@@ -73,34 +73,34 @@ impl<TVar: Variable> Expr<TVar> {
 }
 
 #[derive(Debug, Clone)]
-pub enum ExprInner<TVar: Variable> {
-    BinOp(BinOp, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
-    UniOp(UniOp, Arc<Expr<TVar>>),
+pub enum ExprInner {
+    BinOp(BinOp, Arc<Expr>, Arc<Expr>),
+    UniOp(UniOp, Arc<Expr>),
     /// The first one is an **upper bound** for how big the exponent is
-    Exp(U256, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
-    If(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
+    Exp(U256, Arc<Expr>, Arc<Expr>),
+    If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
     //Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
-    Let(List<(Symbol, Arc<Expr<TVar>>)>, Arc<Expr<TVar>>),
-    Apply(Arc<Expr<TVar>>, List<Expr<TVar>>),
+    Let(List<(Symbol, Arc<Expr>)>, Arc<Expr>),
+    Apply(Arc<Expr>, List<Expr>),
 
-    ApplyGeneric(Arc<Expr<TVar>>, Map<TVar, Type<TVar>>, List<Expr<TVar>>),
+    ApplyGeneric(Arc<Expr>, Map<Symbol, Type>, List<Expr>),
     LitNum(U256),
     LitBytes(Bytes),
-    LitBVec(List<Expr<TVar>>),
-    LitVec(List<Expr<TVar>>),
+    LitBVec(List<Expr>),
+    LitVec(List<Expr>),
 
     Var(Symbol),
-    IsType(Symbol, Type<TVar>),
-    VectorRef(Arc<Expr<TVar>>, Arc<Expr<TVar>>),
-    VectorUpdate(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
-    VectorSlice(Arc<Expr<TVar>>, Arc<Expr<TVar>>, Arc<Expr<TVar>>),
+    IsType(Symbol, Type),
+    VectorRef(Arc<Expr>, Arc<Expr>),
+    VectorUpdate(Arc<Expr>, Arc<Expr>, Arc<Expr>),
+    VectorSlice(Arc<Expr>, Arc<Expr>, Arc<Expr>),
 
     Fail,
 }
 
-impl<TVar: Variable> ExprInner<TVar> {
+impl ExprInner {
     /// Convenience type to wrap in an Expr with the any type
-    pub fn wrap_any(self) -> Expr<TVar> {
+    pub fn wrap_any(self) -> Expr {
         Expr {
             inner: self,
             itype: Type::Any,
@@ -108,7 +108,7 @@ impl<TVar: Variable> ExprInner<TVar> {
     }
 
     /// Convenience type to wrap in an Expr with the given type
-    pub fn wrap(self, t: Type<TVar>) -> Expr<TVar> {
+    pub fn wrap(self, t: Type) -> Expr {
         Expr {
             inner: self,
             itype: t,

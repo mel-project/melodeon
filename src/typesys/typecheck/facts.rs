@@ -1,17 +1,17 @@
 use crate::{
     containers::{Map, Symbol},
-    typesys::{Type, Variable},
+    typesys::Type,
 };
 
 use super::scope::Scope;
 
 /// A carrier of information gleaned about the types of variables through occurrence-typing operators (`is` and such).
 #[derive(Clone, Debug)]
-pub struct TypeFacts<Tv: Variable> {
-    mapping: Map<Symbol, Type<Tv>>,
+pub struct TypeFacts {
+    mapping: Map<Symbol, Type>,
 }
 
-impl<Tv: Variable> TypeFacts<Tv> {
+impl TypeFacts {
     /// Creates a new empty set.
     pub fn empty() -> Self {
         Self {
@@ -20,7 +20,7 @@ impl<Tv: Variable> TypeFacts<Tv> {
     }
 
     /// Adds a mapping to the type facts. If a mapping already exists, replaces it.
-    pub fn with_mapping(mut self, sym: Symbol, t: Type<Tv>) -> Self {
+    pub fn with_mapping(mut self, sym: Symbol, t: Type) -> Self {
         self.mapping.insert(sym, t);
         self
     }
@@ -47,7 +47,7 @@ impl<Tv: Variable> TypeFacts<Tv> {
     }
 
     /// Negates the type facts, with respect to some type state.
-    pub fn negate_against(mut self, universe: &Scope<Tv>) -> Self {
+    pub fn negate_against(mut self, universe: &Scope) -> Self {
         let _pre = self.clone();
         self.mapping.iter_mut().for_each(|(k, b)| {
             if let Some(u) = universe.lookup_var(*k) {
@@ -59,7 +59,7 @@ impl<Tv: Variable> TypeFacts<Tv> {
     }
 
     /// Iterates through the bindings
-    pub fn iter(&self) -> impl Iterator<Item = (&Symbol, &Type<Tv>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Symbol, &Type)> {
         self.mapping.iter()
     }
 }

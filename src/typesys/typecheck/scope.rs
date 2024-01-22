@@ -1,19 +1,19 @@
 use crate::{
     containers::{List, Map, Symbol},
-    typesys::{Type, Variable},
+    typesys::Type,
 };
 
 use super::facts::TypeFacts;
 
 /// A purely-functional typechecking scope.
 #[derive(Debug, Clone, Default)]
-pub struct Scope<TVar: Variable> {
-    variable_scope: Map<Symbol, Type<TVar>>,
-    type_scope: Map<Symbol, Type<TVar>>,
+pub struct Scope {
+    variable_scope: Map<Symbol, Type>,
+    type_scope: Map<Symbol, Type>,
     safety: bool,
 }
 
-impl<TVar: Variable> Scope<TVar> {
+impl Scope {
     /// Creates an empty
     pub fn new() -> Self {
         Self {
@@ -25,13 +25,13 @@ impl<TVar: Variable> Scope<TVar> {
     }
 
     /// Binds a variable.
-    pub fn bind_var(mut self, s: Symbol, t: Type<TVar>) -> Self {
+    pub fn bind_var(mut self, s: Symbol, t: Type) -> Self {
         self.variable_scope.insert(s, t);
         self
     }
 
     /// Binds a list of variables.
-    pub fn bind_vars(mut self, binds: List<(Symbol, Type<TVar>)>) -> Self {
+    pub fn bind_vars(mut self, binds: List<(Symbol, Type)>) -> Self {
         for (s, t) in binds.into_iter() {
             self.variable_scope.insert(s, t);
         }
@@ -39,7 +39,7 @@ impl<TVar: Variable> Scope<TVar> {
     }
 
     /// Binds a type name
-    pub fn bind_type_alias(mut self, alias: Symbol, t: Type<TVar>) -> Self {
+    pub fn bind_type_alias(mut self, alias: Symbol, t: Type) -> Self {
         self.type_scope.insert(alias, t);
         self
     }
@@ -56,21 +56,21 @@ impl<TVar: Variable> Scope<TVar> {
     }
 
     /// Looks up the type of a variable
-    pub fn lookup_var(&self, s: Symbol) -> Option<Type<TVar>> {
+    pub fn lookup_var(&self, s: Symbol) -> Option<Type> {
         self.variable_scope.get(&s).cloned()
     }
 
     /// Looks up a type alias
-    pub fn lookup_type_alias(&self, alias: Symbol) -> Option<Type<TVar>> {
+    pub fn lookup_type_alias(&self, alias: Symbol) -> Option<Type> {
         self.type_scope.get(&alias).cloned()
     }
 
-    pub fn var_scope(&self) -> Map<Symbol, Type<TVar>> {
+    pub fn var_scope(&self) -> Map<Symbol, Type> {
         self.variable_scope.clone()
     }
 
     /// Applies some type facts
-    pub fn with_facts(mut self, facts: &TypeFacts<TVar>) -> Self {
+    pub fn with_facts(mut self, facts: &TypeFacts) -> Self {
         log::trace!("with facts {:?}", facts);
         for (k, v) in facts.iter() {
             if let Some(t) = self.variable_scope.get_mut(k) {

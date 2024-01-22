@@ -5,7 +5,7 @@ use tap::Pipe;
 use crate::{
     containers::{List, Map, Set, Symbol},
     context::{Ctx, ModuleId},
-    typesys::{Type, Variable},
+    typesys::Type,
 };
 
 /// A whole program.
@@ -234,7 +234,7 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
 }
 
 impl RawExpr {
-    pub fn free_variables<Tv: Variable>(&self, var_set: &Map<Symbol, Type<Tv>>) -> Set<Symbol> {
+    pub fn free_variables(&self, var_set: &Map<Symbol, Type>) -> Set<Symbol> {
         let vars = expr_parents(self);
         vars.into_iter()
             .filter(|sym| var_set.contains_key(sym))

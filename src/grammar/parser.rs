@@ -436,7 +436,6 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
         Rule::vector_literal => {
             let children = pair
                 .into_inner()
-                .into_iter()
                 .map(|c| parse_expr(c, source))
                 .collect();
             RawExpr::LitVec(children).with_ctx(ctx)
@@ -444,7 +443,6 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
         Rule::bytes_literal => {
             let children = pair
                 .into_inner()
-                .into_iter()
                 .map(|c| parse_expr(c, source))
                 .collect();
             RawExpr::LitBVec(children).with_ctx(ctx)

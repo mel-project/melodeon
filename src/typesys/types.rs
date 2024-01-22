@@ -1,40 +1,17 @@
-use std::hash::Hash;
 use std::sync::Arc;
 use std::{borrow::Cow, fmt::Debug};
 use tap::Tap;
 
-use crate::containers::{List, Map, Set, Symbol, Void};
+use crate::containers::{List, Map, Set, Symbol};
 
-pub trait Variable: Clone + Hash + Eq + Debug + Ord {
-    /// Possibly convert from a symbol. By default, just fails mercilessly.
-    fn try_from_sym(_: Symbol) -> Option<Self>;
-}
-
-impl Variable for Void {
-    fn try_from_sym(_: Symbol) -> Option<Self> {
-        panic!("cannot make a Void from a symbol")
-    }
-}
-
-impl Variable for Symbol {
-    fn try_from_sym(s: Symbol) -> Option<Self> {
-        Some(s)
-    }
-}
-
-/// A Melodeon type. [`Type`] is generic over one parameter, `T`, which represents the type for type-variables.
-/// This is a generic type in order to statically guarantee the status of free variables. For example, one may start
-/// with `Type<RawT>`, turn that into `Type<MangledT>`, and resolve that into [`Type`].
-///
-/// [`Type`] is an alias for [`Type<Void>`], representing a type with *no* free variables. [`Void`] is a special
-/// type that cannot be constructed, so a value of [`Type<Void>`] *statically* guarantees a lack of free variables.
+/// A Melodeon type.
 ///
 /// In general, typechecking code should not directly match against [`Type`]. Instead, use the subtyping and unification methods as needed.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Type<T = Void> {
+pub enum Type {
     Nothing,
     Any,
-    Var(T),
+    Var(Symbol),
     Nat,
     Vector(List<Self>),
     Vectorof(Arc<Self>),
@@ -42,13 +19,13 @@ pub enum Type<T = Void> {
     Struct(Symbol, List<(Symbol, Self)>),
     Union(Arc<Self>, Arc<Self>),
     Lambda {
-        free_vars: List<T>,
+        free_vars: List<Symbol>,
         args: List<Self>,
         result: Arc<Self>,
     },
 }
 
-impl<T: Variable> Debug for Type<T> {
+impl Debug for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Nothing => std::fmt::Display::fmt("Nothing", f),
@@ -84,7 +61,7 @@ impl<T: Variable> Debug for Type<T> {
     }
 }
 
-impl<TVar: Variable> Type<TVar> {
+impl Type {
     /// Equivalence relation. Returns true iff `self` and `other` are subtypes of each other.
     pub fn equiv_to(&self, other: &Self) -> bool {
         self.subtype_of(other) && other.subtype_of(other)
@@ -99,18 +76,6 @@ impl<TVar: Variable> Type<TVar> {
         };
         res
     }
-
-    // /// Checks whether or not a value of this type can be compared with another value of another type.
-    // pub fn comparable_with(&self, other: &Self) -> bool {
-    //     log::trace!("checking {:?} comparable? {:?}", self, other);
-    //     match (self, other) {
-    //         (Type::Any, _) => false,
-    //         (Type::NatRange(_, _), Type::NatRange(_, _)) => true,
-    //         (Type::Struct(_, _), Type::Struct(_, _)) =>
-    //         (Type::Union(t, u), _) => t.comparable_with(other) && u.comparable_with(other),
-    //         _ => other.comparable_with(self),
-    //     }
-    // }
 
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
@@ -260,10 +225,7 @@ impl<TVar: Variable> Type<TVar> {
     }
 
     /// Using the current type (which contains typevars of type TVar) as a template, as well as a different type where the "holes" formed by these typevars are filled, derive a mapping between the free typevars of [self] and types.
-    pub fn unify_tvars<TVar2: Variable>(
-        &self,
-        other: &Type<TVar2>,
-    ) -> Option<Map<TVar, Type<TVar2>>> {
+    pub fn unify_tvars(&self, other: &Type) -> Option<Map<Symbol, Type>> {
         log::trace!("unify_tvars {:?} with {:?}", self, other);
         // First, we find out exactly *where* in self do the typevars appear.
         let locations = self.tvar_locations();
@@ -301,15 +263,15 @@ impl<TVar: Variable> Type<TVar> {
     }
 
     /// Creates a mapping of free type variables and their locations in the type. Locations are represented as indexes. An index is either a number, or None, which represents "all".
-    fn tvar_locations(&self) -> Map<TVar, Set<List<Option<usize>>>> {
+    fn tvar_locations(&self) -> Map<Symbol, Set<List<Option<usize>>>> {
         match self {
             Type::Var(tvar) => Map::new().tap_mut(|map| {
-                map.insert(tvar.clone(), [List::new()].into_iter().collect());
+                map.insert(*tvar, [List::new()].into_iter().collect());
             }),
             Type::Vector(vec) => {
                 let mut mapping = Map::new();
                 for (idx, v) in vec.iter().enumerate() {
-                    let child_map: Map<TVar, Set<List<Option<usize>>>> = v
+                    let child_map: Map<Symbol, Set<List<Option<usize>>>> = v
                         .tvar_locations()
                         .into_iter()
                         .map(|(k, v)| {
@@ -339,30 +301,21 @@ impl<TVar: Variable> Type<TVar> {
     }
 
     /// Fills in all type-variables, given a fallible function that resolves type-variables. If the resolution fails at any step, returns [None].
-    pub fn try_fill_tvars<NewTVar: Variable>(
-        &self,
-        mapping: impl Fn(&TVar) -> Option<Type<NewTVar>>,
-    ) -> Option<Type<NewTVar>> {
+    pub fn try_fill_tvars(&self, mapping: impl Fn(Symbol) -> Option<Type>) -> Option<Type> {
         self.try_fill_tvars_inner(&mapping)
     }
 
     /// Fills in all type-variables, except infallibly.
-    pub fn fill_tvars<NewTVar: Variable>(
-        &self,
-        mapping: impl Fn(&TVar) -> Type<NewTVar>,
-    ) -> Type<NewTVar> {
+    pub fn fill_tvars(&self, mapping: impl Fn(Symbol) -> Type) -> Type {
         self.try_fill_tvars(|tv| Some(mapping(tv))).unwrap()
     }
 
     // separate out for recursion
-    fn try_fill_tvars_inner<NewTVar: Variable>(
-        &self,
-        mapping: &impl Fn(&TVar) -> Option<Type<NewTVar>>,
-    ) -> Option<Type<NewTVar>> {
+    fn try_fill_tvars_inner(&self, mapping: &impl Fn(Symbol) -> Option<Type>) -> Option<Type> {
         match self {
             Type::Nothing => Some(Type::Nothing),
             Type::Any => Some(Type::Any),
-            Type::Var(tvar) => mapping(tvar),
+            Type::Var(tvar) => mapping(*tvar),
             Type::Nat => Some(Type::Nat),
             Type::Vector(elems) => {
                 let elems: Option<List<_>> = elems
@@ -386,7 +339,7 @@ impl<TVar: Variable> Type<TVar> {
 
             Type::Bytes => Some(Type::Bytes),
             Type::Lambda {
-                free_vars,
+                free_vars: _,
                 args,
                 result,
             } => {
