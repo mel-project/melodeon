@@ -476,13 +476,6 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
     }
 }
 
-fn parse_setbang(pair: Pair<Rule>, source: ModuleId) -> (Symbol, Ctx<RawExpr>) {
-    let mut children = pair.into_inner();
-    let var_name = Symbol::from(children.next().unwrap().as_str());
-    let value = parse_expr(children.next().unwrap(), source);
-    (var_name, value)
-}
-
 fn p2ctx(pair: &Pair<Rule>, source: ModuleId) -> CtxLocation {
     CtxLocation {
         source,

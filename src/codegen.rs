@@ -63,13 +63,9 @@ fn codegen_expr(expr: &Expr) -> Ir {
                 BinOp::Div => OpCode::Div,
                 BinOp::Mod => OpCode::Rem,
                 BinOp::Append => {
-                    if x.itype.deunionize().any(|f| matches!(f, Type::DynBytes)) {
+                    if x.itype.deunionize().any(|f| matches!(f, Type::Bytes)) {
                         OpCode::BAppend
-                    } else if x
-                        .itype
-                        .deunionize()
-                        .any(|f| matches!(f, Type::DynVectorof(_)))
-                    {
+                    } else if x.itype.deunionize().any(|f| matches!(f, Type::Vectorof(_))) {
                         OpCode::VAppend
                     } else {
                         todo!("dynamic dispatch for appends")
@@ -120,13 +116,9 @@ fn codegen_expr(expr: &Expr) -> Ir {
         ExprInner::Var(v) => Ir::LitVar(*v),
         ExprInner::IsType(_a, _t) => todo!("is not supported yet"),
         ExprInner::VectorRef(v, i) => Ir::Op(
-            if v.itype.deunionize().any(|f| matches!(f, Type::DynBytes)) {
+            if v.itype.deunionize().any(|f| matches!(f, Type::Bytes)) {
                 OpCode::BRef
-            } else if v
-                .itype
-                .deunionize()
-                .any(|f| matches!(f, Type::DynVectorof(_)))
-            {
+            } else if v.itype.deunionize().any(|f| matches!(f, Type::Vectorof(_))) {
                 OpCode::VRef
             } else {
                 todo!("dynamic dispatch for vector ref")

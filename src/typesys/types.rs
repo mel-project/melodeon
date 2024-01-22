@@ -37,8 +37,8 @@ pub enum Type<T = Void> {
     Var(T),
     Nat,
     Vector(List<Self>),
-    DynVectorof(Arc<Self>),
-    DynBytes,
+    Vectorof(Arc<Self>),
+    Bytes,
     Struct(Symbol, List<(Symbol, Self)>),
     Union(Arc<Self>, Arc<Self>),
     Lambda {
@@ -59,9 +59,9 @@ impl<T: Variable> Debug for Type<T> {
 
             Type::Struct(s, _) => std::fmt::Display::fmt(&format!("{}", s), f),
             Type::Union(t, u) => std::fmt::Display::fmt(&format!("{:?} | {:?}", t, u), f),
-            Type::DynVectorof(t) => std::fmt::Display::fmt(&format!("[{:?};]", t), f),
+            Type::Vectorof(t) => std::fmt::Display::fmt(&format!("[{:?};]", t), f),
 
-            Type::DynBytes => std::fmt::Display::fmt("%[]", f),
+            Type::Bytes => std::fmt::Display::fmt("%[]", f),
 
             Type::Lambda {
                 free_vars: _,
@@ -139,7 +139,7 @@ impl<TVar: Variable> Type<TVar> {
                 // pairwise comparison
                 v1.len() == v2.len() && v1.iter().zip(v2.iter()).all(|(v1, v2)| v1.subtype_of(v2))
             }
-            (Type::Vector(v1), Type::DynVectorof(t)) => v1.iter().all(|t1| t1.subtype_of(t)),
+            (Type::Vector(v1), Type::Vectorof(t)) => v1.iter().all(|t1| t1.subtype_of(t)),
 
             (Type::Vector(v1), Type::Union(t, u)) => {
                 // We "look into" the RHS vector. This is more precise than the union rule.
@@ -160,16 +160,16 @@ impl<TVar: Variable> Type<TVar> {
             }
             (Type::Vector(_), _) => false,
 
-            (Type::DynVectorof(v1_all), Type::DynVectorof(v2_all)) => v1_all.subtype_of(v2_all),
-            (Type::DynVectorof(_), Type::Union(t, u)) => {
+            (Type::Vectorof(v1_all), Type::Vectorof(v2_all)) => v1_all.subtype_of(v2_all),
+            (Type::Vectorof(_), Type::Union(t, u)) => {
                 // conservatively deal with this
                 self.subtype_of(t) || self.subtype_of(u)
             }
-            (Type::DynVectorof(_), _) => false,
+            (Type::Vectorof(_), _) => false,
 
-            (Type::DynBytes, Type::DynBytes) => true,
-            (Type::DynBytes, Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
-            (Type::DynBytes, _) => false,
+            (Type::Bytes, Type::Bytes) => true,
+            (Type::Bytes, Type::Union(t, u)) => self.subtype_of(t) || self.subtype_of(u),
+            (Type::Bytes, _) => false,
             (Type::Nat, Type::Nat) => true,
             (Type::Nat, Type::Union(a, b)) => self.subtype_of(a) || self.subtype_of(b),
             (Type::Nat, _) => false,
@@ -241,15 +241,15 @@ impl<TVar: Variable> Type<TVar> {
             Type::Var(_) => Cow::Borrowed(self),
 
             Type::Struct(_, _) => Cow::Borrowed(self),
-            Type::DynVectorof(t) => {
-                if let Type::DynVectorof(their_t) = other {
-                    Cow::Owned(Type::DynVectorof(t.subtract(their_t).into_owned().into()))
+            Type::Vectorof(t) => {
+                if let Type::Vectorof(their_t) = other {
+                    Cow::Owned(Type::Vectorof(t.subtract(their_t).into_owned().into()))
                 } else {
                     Cow::Borrowed(self)
                 }
             }
 
-            Type::DynBytes => Cow::Borrowed(self),
+            Type::Bytes => Cow::Borrowed(self),
             Type::Nat => Cow::Borrowed(self),
             Type::Lambda {
                 free_vars: _,
@@ -382,16 +382,24 @@ impl<TVar: Variable> Type<TVar> {
                 a.try_fill_tvars_inner(mapping)?.into(),
                 b.try_fill_tvars_inner(mapping)?.into(),
             )),
-            Type::DynVectorof(t) => {
-                Some(Type::DynVectorof(t.try_fill_tvars_inner(mapping)?.into()))
-            }
+            Type::Vectorof(t) => Some(Type::Vectorof(t.try_fill_tvars_inner(mapping)?.into())),
 
-            Type::DynBytes => Some(Type::DynBytes),
+            Type::Bytes => Some(Type::Bytes),
             Type::Lambda {
-                free_vars: _,
-                args: _,
-                result: _,
-            } => todo!(),
+                free_vars,
+                args,
+                result,
+            } => {
+                // this is *not* really correct in the general case, but we only fill type-vars to 1. type erase or 2. on non-lambdas
+                Some(Type::Lambda {
+                    free_vars: vec![],
+                    args: args
+                        .iter()
+                        .map(|a| a.try_fill_tvars_inner(mapping))
+                        .collect::<Option<List<_>>>()?,
+                    result: result.try_fill_tvars_inner(mapping)?.into(),
+                })
+            }
         }
     }
 

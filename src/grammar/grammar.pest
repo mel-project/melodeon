@@ -80,9 +80,9 @@ type_terminal = _{
     type_dynbytes           |
     type_lambda             |
 
-    "(" ~ type_expr ~ ")"  
+    "(" ~ type_expr ~ ")"
 }
-type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" } 
+type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" }
 type_dynvectorof = { "[" ~ type_expr ~ ";" ~ "]" }
 type_dynbytes = {"%[" ~ "]" }
 type_lambda = { "(" ~ (type_expr ~ ",")* ~ type_expr? ~ ")" ~ "->" ~ type_expr }
