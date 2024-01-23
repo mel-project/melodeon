@@ -77,7 +77,6 @@ pub enum ExprInner {
     BinOp(BinOp, Arc<Expr>, Arc<Expr>),
     UniOp(UniOp, Arc<Expr>),
     /// The first one is an **upper bound** for how big the exponent is
-    Exp(U256, Arc<Expr>, Arc<Expr>),
     If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
     //Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     Let(List<(Symbol, Arc<Expr>)>, Arc<Expr>),
@@ -130,6 +129,7 @@ pub enum BinOp {
     Mul,
     Div,
     Mod,
+    Expt,
 
     Append,
 

@@ -1,4 +1,4 @@
-use std::{ops::Deref};
+use std::ops::Deref;
 
 use anyhow::Context;
 
@@ -169,11 +169,9 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
     }
     log::trace!("initial definitions created: {:?}", fun_defs);
     // time to typecheck the expression preliminarily
-    let (prelim_body, _) = typecheck_expr(scope, raw.body.clone())?;
-    log::trace!("preliminary body created: {:?}", prelim_body);
+    let (body, _) = typecheck_expr(scope, raw.body.clone())?;
 
-    // MONOMORPHIZE!
-    Ok(erase_types(fun_defs, prelim_body))
+    Ok(Program { fun_defs, body })
 }
 
 /// Typechecks a single expression, returning a single typed ast node.
@@ -265,7 +263,7 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                     Ok((
                         Expr {
                             itype: Type::Nat,
-                            inner: ExprInner::Exp(U256::MAX, a_expr?.into(), b_expr?.into()),
+                            inner: ExprInner::BinOp(BinOp::Expt, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
                     ))
@@ -805,86 +803,6 @@ fn typecheck_type_expr(state: &Scope, raw: Ctx<RawTypeExpr>) -> CtxResult<Type> 
         }
 
         RawTypeExpr::DynBytes => Ok(Type::Bytes),
-    }
-}
-
-/// Type-erases a set of function definitions and a "preliminary" body into a fully degenericized version.
-pub fn erase_types(fun_defs: List<FunDefn>, body: Expr) -> Program {
-    Program {
-        fun_defs: fun_defs
-            .into_iter()
-            .map(|fd| {
-                let FunDefn { name, args, body } = fd;
-                FunDefn {
-                    name,
-                    args,
-                    body: erase_types_inner(&body),
-                }
-            })
-            .collect(),
-        body: erase_types_inner(&body),
-    }
-}
-
-fn erase_types_inner(expr: &Expr) -> Expr {
-    let Expr { inner, itype } = expr;
-    let new_itype: Type = itype.fill_tvars(|_| Type::Any);
-    let new_inner = match inner {
-        ExprInner::BinOp(b, x, y) => {
-            ExprInner::BinOp(*b, erase_types_inner(x).into(), erase_types_inner(y).into())
-        }
-        ExprInner::UniOp(u, e) => ExprInner::UniOp(*u, erase_types_inner(e).into()),
-        ExprInner::Exp(upper_bound, base, expo) => ExprInner::Exp(
-            *upper_bound,
-            erase_types_inner(base).into(),
-            erase_types_inner(expo).into(),
-        ),
-        ExprInner::If(c, e1, e2) => ExprInner::If(
-            erase_types_inner(c).into(),
-            erase_types_inner(e1).into(),
-            erase_types_inner(e2).into(),
-        ),
-        ExprInner::Let(bindings, value) => {
-            let new_bindings = bindings
-                .iter()
-                .map(|(s, e)| (*s, erase_types_inner(e).into()))
-                .collect();
-            ExprInner::Let(new_bindings, erase_types_inner(value).into())
-        }
-        ExprInner::Apply(f, args) => ExprInner::Apply(
-            erase_types_inner(f).into(),
-            args.iter().map(erase_types_inner).collect(),
-        ),
-        ExprInner::ApplyGeneric(f, _, args) => ExprInner::Apply(
-            erase_types_inner(f).into(),
-            args.iter().map(erase_types_inner).collect(),
-        ),
-        ExprInner::LitNum(n) => ExprInner::LitNum(*n),
-        ExprInner::LitBytes(bytes) => ExprInner::LitBytes(bytes.clone()),
-        ExprInner::LitBVec(bvec) => {
-            ExprInner::LitBVec(bvec.iter().map(erase_types_inner).collect())
-        }
-        ExprInner::LitVec(vec) => ExprInner::LitVec(vec.iter().map(erase_types_inner).collect()),
-        ExprInner::Var(symbol) => ExprInner::Var(*symbol),
-        ExprInner::IsType(symbol, _) => ExprInner::IsType(*symbol, Type::Any),
-        ExprInner::VectorRef(e1, e2) => {
-            ExprInner::VectorRef(erase_types_inner(e1).into(), erase_types_inner(e2).into())
-        }
-        ExprInner::VectorUpdate(e1, e2, e3) => ExprInner::VectorUpdate(
-            erase_types_inner(e1).into(),
-            erase_types_inner(e2).into(),
-            erase_types_inner(e3).into(),
-        ),
-        ExprInner::VectorSlice(e1, e2, e3) => ExprInner::VectorSlice(
-            erase_types_inner(e1).into(),
-            erase_types_inner(e2).into(),
-            erase_types_inner(e3).into(),
-        ),
-        ExprInner::Fail => ExprInner::Fail,
-    };
-    Expr {
-        inner: new_inner,
-        itype: new_itype,
     }
 }
 

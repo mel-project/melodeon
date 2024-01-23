@@ -50,7 +50,7 @@ fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
     })?;
     let tchecked = time_stage("typecheck", || typecheck_program(raw_input))?;
     let product = time_stage("codegen", || codegen_program(tchecked));
-    println!("{}", serde_yaml::to_string(&product).unwrap());
+    println!("{:?}", product);
     Ok(())
 }
 

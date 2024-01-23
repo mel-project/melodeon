@@ -7,24 +7,12 @@ use crate::{
 };
 use ethnum::U256;
 
-use melvm::opcode::OpCode;
+use mil2::Mil;
 use serde::{Deserialize, Serialize};
-
-/// The final intermediate representation that can be quickly translated into MelVM instructions.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub enum Ir {
-    Op(OpCode, Arc<Vec<Ir>>),
-    Call(Arc<Ir>, Arc<Vec<Ir>>),
-    Bind(imbl::HashMap<Symbol, Ir>, Arc<Ir>),
-    LitNum(U256),
-    Lambda(Vec<Symbol>, Arc<Ir>),
-    LitVar(Symbol),
-    VEmpty,
-    BEmpty,
-}
+use smol_str::ToSmolStr;
 
 /// Generates Mil code (in s-expression format) by traversing a fully monomorphized Program.
-pub fn codegen_program(prog: Program) -> Ir {
+pub fn codegen_program(prog: Program) -> Mil {
     log::debug!(
         "generating code for program with {} monomorphized definitions",
         prog.fun_defs.len()
@@ -34,112 +22,76 @@ pub fn codegen_program(prog: Program) -> Ir {
         .iter()
         .map(|fdef| {
             let body = codegen_expr(&fdef.body);
-            (fdef.name, Ir::Lambda(fdef.args.clone(), Arc::new(body)))
+            (
+                fdef.name.to_smolstr(),
+                Mil::Lambda(
+                    fdef.args.iter().map(|sym| sym.to_smolstr()).collect(),
+                    Arc::new(body),
+                ),
+            )
         })
         .fold(imbl::HashMap::new(), |mut h, (k, v)| {
             h.insert(k, v);
             h
         });
-    Ir::Bind(toplevel_bindings, codegen_expr(&prog.body).into())
+    Mil::Letrec(toplevel_bindings, codegen_expr(&prog.body).into())
 }
 
-fn codegen_expr(expr: &Expr) -> Ir {
+fn codegen_expr(expr: &Expr) -> Mil {
     match &expr.inner {
-        ExprInner::BinOp(BinOp::Eq, _x, _y) => {
-            todo!()
-        }
-        ExprInner::UniOp(op, x) => {
-            let op = match op {
-                UniOp::Bnot => OpCode::Not,
-            };
-            let x = codegen_expr(x);
-            Ir::Op(op, vec![x].into())
-        }
         ExprInner::BinOp(op, x, y) => {
-            let op = match op {
-                BinOp::Add => OpCode::Add,
-                BinOp::Sub => OpCode::Sub,
-                BinOp::Mul => OpCode::Mul,
-                BinOp::Div => OpCode::Div,
-                BinOp::Mod => OpCode::Rem,
-                BinOp::Append => {
-                    if x.itype.deunionize().any(|f| matches!(f, Type::Bytes)) {
-                        OpCode::BAppend
-                    } else if x.itype.deunionize().any(|f| matches!(f, Type::Vectorof(_))) {
-                        OpCode::VAppend
-                    } else {
-                        todo!("dynamic dispatch for appends")
-                    }
-                }
-                BinOp::Eq => todo!("dynamic dispatch for equality"),
-                BinOp::Lt => OpCode::Lt,
-                BinOp::Le => todo!("dynamic dispatch for <="),
-                BinOp::Gt => OpCode::Gt,
-                BinOp::Ge => todo!("dynamic dispatch for >="),
-                BinOp::Bor => OpCode::Or,
-                BinOp::Band => OpCode::And,
-                BinOp::Bxor => OpCode::Xor,
-                BinOp::Lshift => OpCode::Shl,
-                BinOp::Rshift => OpCode::Shr,
-            };
             let x = codegen_expr(x);
             let y = codegen_expr(y);
-            Ir::Op(op, vec![x, y].into())
+            let op = match op {
+                BinOp::Add => mil2::BinOp::Add,
+                BinOp::Sub => mil2::BinOp::Sub,
+                BinOp::Mul => mil2::BinOp::Mul,
+                BinOp::Div => mil2::BinOp::Div,
+                BinOp::Mod => mil2::BinOp::Rem,
+                BinOp::Expt => mil2::BinOp::Exp,
+                BinOp::Append => mil2::BinOp::Vappend,
+                BinOp::Eq => mil2::BinOp::Eql,
+                BinOp::Lt => todo!(),
+                BinOp::Le => todo!(),
+                BinOp::Gt => todo!(),
+                BinOp::Ge => todo!(),
+                BinOp::Bor => todo!(),
+                BinOp::Band => todo!(),
+                BinOp::Bxor => todo!(),
+                BinOp::Lshift => todo!(),
+                BinOp::Rshift => todo!(),
+            };
+            Mil::BinOp(op, x.into(), y.into())
         }
-        ExprInner::Exp(_k, base, exp) => {
-            let x = codegen_expr(base);
-            let y = codegen_expr(exp);
-            Ir::Op(OpCode::Exp(255), vec![x, y].into())
-        }
-        ExprInner::If(_a, _b, _c) => todo!("if expression not impl"),
-        ExprInner::Let(binds, inner) => {
-            let inner = codegen_expr(inner);
-            Ir::Bind(
-                binds
-                    .iter()
-                    .map(|(sym, expr)| (*sym, codegen_expr(expr)))
-                    .collect(),
-                Arc::new(inner),
-            )
-        }
-        ExprInner::Apply(f, vec) => Ir::Call(
-            Arc::new(codegen_expr(f)),
-            Arc::new(vec.iter().map(codegen_expr).collect()),
-        ),
-        ExprInner::ApplyGeneric(_, _, _) => unreachable!(),
-        ExprInner::LitNum(num) => Ir::LitNum(*num),
-        ExprInner::LitVec(vec) => vec.iter().fold(Ir::VEmpty, |v, a| {
-            Ir::Op(OpCode::VPush, vec![v, codegen_expr(a)].into())
-        }),
-        ExprInner::LitBVec(_vec) => todo!("byte strings not supported yet"),
+        ExprInner::UniOp(_, _) => todo!(),
 
-        ExprInner::Var(v) => Ir::LitVar(*v),
-        ExprInner::IsType(_a, _t) => todo!("is not supported yet"),
-        ExprInner::VectorRef(v, i) => Ir::Op(
-            if v.itype.deunionize().any(|f| matches!(f, Type::Bytes)) {
-                OpCode::BRef
-            } else if v.itype.deunionize().any(|f| matches!(f, Type::Vectorof(_))) {
-                OpCode::VRef
-            } else {
-                todo!("dynamic dispatch for vector ref")
-            },
-            vec![codegen_expr(v), codegen_expr(i)].into(),
-        ),
-        ExprInner::VectorUpdate(_v, i, n) => {
-            Ir::Op(OpCode::VSet, vec![codegen_expr(i), codegen_expr(n)].into())
+        ExprInner::If(condition, then_case, else_case) => {
+            let condition = codegen_expr(condition);
+            let then_case = codegen_expr(then_case);
+            let else_case = codegen_expr(else_case);
+            Mil::IfThenElse(condition.into(), then_case.into(), else_case.into())
         }
-        ExprInner::VectorSlice(_v, i, j) => Ir::Op(
-            OpCode::VSlice,
-            vec![codegen_expr(i), codegen_expr(j)].into(),
-        ),
-
-        ExprInner::Fail => todo!("fail not implemented"),
-        ExprInner::LitBytes(b) => b.iter().fold(Ir::BEmpty, |v, a| {
-            Ir::Op(
-                OpCode::BPush,
-                vec![v, Ir::LitNum((*a as u64).into())].into(),
-            )
-        }),
+        ExprInner::Let(bindings, inner) => {
+            bindings
+                .iter()
+                .rev()
+                .fold(codegen_expr(inner), |inner, (var_name, var_value)| {
+                    let var_value = codegen_expr(var_value);
+                    Mil::Let(var_name.to_smolstr(), var_value.into(), inner.into())
+                })
+        }
+        ExprInner::Apply(_, _) => todo!(),
+        ExprInner::ApplyGeneric(_, _, _) => todo!(),
+        ExprInner::LitNum(num) => Mil::Number(*num),
+        ExprInner::LitBytes(_) => todo!(),
+        ExprInner::LitBVec(_) => todo!(),
+        ExprInner::LitVec(_) => todo!(),
+        ExprInner::Var(x) => Mil::Var(x.to_smolstr()),
+        ExprInner::IsType(_, _) => todo!(),
+        ExprInner::VectorRef(_, _) => todo!(),
+        ExprInner::VectorUpdate(_, _, _) => todo!(),
+        ExprInner::VectorSlice(_, _, _) => todo!(),
+        ExprInner::Fail => todo!(),
     }
 }
 
@@ -162,7 +114,7 @@ mod tests {
     }
 
     #[test]
-    fn vector_slice() {
+    fn simple_test() {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
@@ -171,7 +123,7 @@ mod tests {
                 typecheck_program(
                     parse_program(
                         r"
-                        [1, 2, 3][0..3]
+                        1 + 2
                         ",
                         module,
                         &std::path::PathBuf::from(""),
