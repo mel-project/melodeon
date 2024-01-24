@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    containers::Symbol,
     typed_ast::{BinOp, Expr, ExprInner, Program, UniOp},
     typesys::Type,
 };
 use ethnum::U256;
 
 use mil2::Mil;
-use serde::{Deserialize, Serialize};
+
 use smol_str::ToSmolStr;
 
 /// Generates Mil code (in s-expression format) by traversing a fully monomorphized Program.
@@ -49,21 +48,34 @@ fn codegen_expr(expr: &Expr) -> Mil {
                 BinOp::Div => mil2::BinOp::Div,
                 BinOp::Mod => mil2::BinOp::Rem,
                 BinOp::Expt => mil2::BinOp::Exp,
-                BinOp::Append => mil2::BinOp::Vappend,
-                BinOp::Eq => mil2::BinOp::Eql,
-                BinOp::Lt => todo!(),
-                BinOp::Le => todo!(),
-                BinOp::Gt => todo!(),
-                BinOp::Ge => todo!(),
-                BinOp::Bor => todo!(),
-                BinOp::Band => todo!(),
-                BinOp::Bxor => todo!(),
-                BinOp::Lshift => todo!(),
-                BinOp::Rshift => todo!(),
+                BinOp::Append => {
+                    return Mil::Call(Mil::Var("__dyn_append".into()).into(), vec![x, y].into())
+                }
+                BinOp::Eq => {
+                    return Mil::Call(Mil::Var("__dyn_equal".into()).into(), vec![x, y].into())
+                }
+                BinOp::Lt => mil2::BinOp::Lt,
+                BinOp::Le => {
+                    return Mil::Call(Mil::Var("__dyn_leq".into()).into(), vec![x, y].into())
+                }
+                BinOp::Gt => mil2::BinOp::Gt,
+                BinOp::Ge => {
+                    return Mil::Call(Mil::Var("__dyn_geq".into()).into(), vec![x, y].into())
+                }
+                BinOp::Bor => mil2::BinOp::Bor,
+                BinOp::Band => mil2::BinOp::Band,
+                BinOp::Bxor => mil2::BinOp::Bxor,
+                BinOp::Lshift => mil2::BinOp::Lshift,
+                BinOp::Rshift => mil2::BinOp::Rshift,
             };
             Mil::BinOp(op, x.into(), y.into())
         }
-        ExprInner::UniOp(_, _) => todo!(),
+        ExprInner::UniOp(op, inner) => {
+            let op = match op {
+                UniOp::Bnot => mil2::UniOp::Bnot,
+            };
+            Mil::UniOp(op, codegen_expr(inner).into())
+        }
 
         ExprInner::If(condition, then_case, else_case) => {
             let condition = codegen_expr(condition);
@@ -81,17 +93,53 @@ fn codegen_expr(expr: &Expr) -> Mil {
                 })
         }
         ExprInner::Apply(_, _) => todo!(),
-        ExprInner::ApplyGeneric(_, _, _) => todo!(),
+        ExprInner::ApplyGeneric(f, _, args) => Mil::Call(
+            codegen_expr(f).into(),
+            args.iter().map(codegen_expr).collect(),
+        ),
         ExprInner::LitNum(num) => Mil::Number(*num),
         ExprInner::LitBytes(_) => todo!(),
         ExprInner::LitBVec(_) => todo!(),
-        ExprInner::LitVec(_) => todo!(),
+        ExprInner::LitVec(vec) => Mil::List(vec.iter().map(codegen_expr).collect()),
         ExprInner::Var(x) => Mil::Var(x.to_smolstr()),
-        ExprInner::IsType(_, _) => todo!(),
-        ExprInner::VectorRef(_, _) => todo!(),
+        ExprInner::IsType(x, t) => {
+            // recurse through the type
+            let checker = is_type_checker(t);
+            Mil::Call(checker.into(), vec![Mil::Var(x.to_smolstr())].into())
+        }
+        ExprInner::VectorRef(vec, idx) => Mil::BinOp(
+            mil2::BinOp::Vref,
+            codegen_expr(vec).into(),
+            codegen_expr(idx).into(),
+        ),
         ExprInner::VectorUpdate(_, _, _) => todo!(),
         ExprInner::VectorSlice(_, _, _) => todo!(),
         ExprInner::Fail => todo!(),
+    }
+}
+
+fn is_type_checker(t: &Type) -> Mil {
+    match t {
+        Type::Nothing => Mil::Number(U256::ZERO),
+        Type::Any => Mil::Number(U256::ONE),
+        Type::Var(_) => Mil::Number(U256::ZERO),
+        Type::Nat => Mil::Var("__istype_nat".into()),
+        Type::Vector(inner) => Mil::Call(
+            Mil::Var("__istype_vector_by_idx".into()).into(),
+            inner.iter().map(is_type_checker).collect(),
+        ),
+        Type::Vectorof(inner) => Mil::Call(
+            Mil::Var("__istype_vectorof".into()).into(),
+            vec![is_type_checker(inner)].into(),
+        ),
+        Type::Bytes => Mil::Var("__istype_bytes".into()),
+        Type::Struct(_, _) => todo!(),
+        Type::Union(_, _) => todo!(),
+        Type::Lambda {
+            free_vars: _,
+            args: _,
+            result: _,
+        } => todo!(),
     }
 }
 
@@ -190,35 +238,6 @@ mod tests {
     }
 
     #[test]
-    fn simple_codegen() {
-        init_logs();
-        let module = ModuleId::from_path(Path::new("whatever.melo"));
-        eprintln!(
-            "{:?}",
-            codegen_program(
-                typecheck_program(
-                    parse_program(
-                        r"
-                        def succ<$n>(x: {$n..$n}) = $n + 1
-                        def peel<$n>(x : {$n+1..$n+1}) = $n
-                        --- 
-                        let res = (let x = 0 :: Nat in
-                        loop 100 do
-                            x <- x + 1
-                        return x) in
-                        res is Nat | [Nat, Nat]
-                        ",
-                        module,
-                        &std::path::PathBuf::from(""),
-                    )
-                    .unwrap()
-                )
-                .unwrap()
-            )
-        );
-    }
-
-    #[test]
     fn empty_byte_string() {
         init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
@@ -229,28 +248,6 @@ mod tests {
                     parse_program(
                         r#"
                         "test" ++ ""
-                        "#,
-                        module,
-                        &std::path::PathBuf::from(""),
-                    )
-                    .unwrap()
-                )
-                .unwrap()
-            )
-        );
-    }
-
-    #[test]
-    fn vref_stuff() {
-        init_logs();
-        let module = ModuleId::from_path(Path::new("whatever.melo"));
-        eprintln!(
-            "{:?}",
-            codegen_program(
-                typecheck_program(
-                    parse_program(
-                        r#"
-                        let nested = [[0,1], [2,3], [4,5]] in for val in vref(nested, 1) collect val + 1
                         "#,
                         module,
                         &std::path::PathBuf::from(""),

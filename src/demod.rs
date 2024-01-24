@@ -32,29 +32,27 @@ impl Demodularizer {
     pub fn new_at_fs(root: &Path, global_root: &Path) -> Self {
         let root = root.to_owned();
         let global_root = global_root.to_owned();
-        let fallback =
-            move |mid: ModuleId| {
-                let mid = mid.to_string();
-                if let Some(stripped) = mid.strip_prefix('$') {
-                    let mut root = global_root.clone();
-                    root.push(stripped);
-                    log::debug!("reading library {:?}", root);
-                    Ok(std::fs::read_to_string(Path::new(&format!(
-                        "{}.melo",
-                        root.to_string_lossy()
-                    )))
-                    .or_else(|_| {
-                        std::fs::read_to_string(Path::new(&format!(
-                            "{}/main.melo",
-                            root.to_string_lossy()
-                        )))
-                    })?)
-                } else {
-                    let mut root = root.clone();
-                    root.push(&mid);
-                    Ok(std::fs::read_to_string(&root)?)
-                }
-            };
+        let fallback = move |mid: ModuleId| {
+            let mid = mid.to_string();
+            if let Some(stripped) = mid.strip_prefix('$') {
+                let mut root = global_root.clone();
+                root.push(stripped);
+                log::debug!("reading library {:?}", root);
+                Ok(
+                    std::fs::read_to_string(Path::new(&format!("{}.melo", root.to_string_lossy())))
+                        .or_else(|_| {
+                            std::fs::read_to_string(Path::new(&format!(
+                                "{}/main.melo",
+                                root.to_string_lossy()
+                            )))
+                        })?,
+                )
+            } else {
+                let mut root = root.clone();
+                root.push(&mid);
+                Ok(std::fs::read_to_string(&root)?)
+            }
+        };
         Self {
             cache: DashMap::new(),
             fallback: Arc::new(fallback),

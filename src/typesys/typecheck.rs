@@ -2,8 +2,8 @@ use std::ops::Deref;
 
 use anyhow::Context;
 
-use ethnum::U256;
 use rustc_hash::FxHashSet;
+use tap::Tap;
 
 use crate::{
     containers::{List, Symbol},
@@ -351,9 +351,48 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                 }
                 crate::grammar::BinOp::Append => {
                     // vector append
-                    let _a_expr = a_expr?;
-                    let _b_expr = b_expr?;
-                    todo!()
+                    let a_expr = a_expr?;
+                    let b_expr = b_expr?;
+                    // TODO something more intelligent here
+                    let mut result = Type::Nothing;
+                    for possible_a_type in a_expr.itype.deunionize() {
+                        for possible_b_type in b_expr.itype.deunionize() {
+                            result =
+                                result.smart_union(&match (possible_a_type, possible_b_type) {
+                                    (Type::Vector(a), Type::Vector(b)) => Type::Vector(
+                                        a.clone().tap_mut(|a| a.append(&mut b.clone())),
+                                    ),
+                                    (Type::Vectorof(a), Type::Vectorof(b)) => {
+                                        Type::Vectorof(a.smart_union(b).into())
+                                    }
+                                    (Type::Vectorof(a), Type::Vector(inners))
+                                    | (Type::Vector(inners), Type::Vectorof(a)) => Type::Vectorof(
+                                        a.smart_union(
+                                            &inners
+                                                .iter()
+                                                .fold(Type::Nothing, |a, b| a.smart_union(b)),
+                                        )
+                                        .into(),
+                                    ),
+                                    (Type::Bytes, Type::Bytes) => Type::Bytes,
+                                    _ => {
+                                        return Err(anyhow::anyhow!(
+                                            "cannot append types {:?} and {:?}",
+                                            possible_a_type,
+                                            possible_b_type
+                                        )
+                                        .with_ctx(ctx))
+                                    }
+                                });
+                        }
+                    }
+                    Ok((
+                        Expr {
+                            itype: result,
+                            inner: ExprInner::BinOp(BinOp::Append, a_expr.into(), b_expr.into()),
+                        },
+                        TypeFacts::empty(),
+                    ))
                 }
                 crate::grammar::BinOp::Lor => {
                     // Desugar!
