@@ -112,8 +112,18 @@ fn codegen_expr(expr: &Expr) -> Mil {
             codegen_expr(vec).into(),
             codegen_expr(idx).into(),
         ),
-        ExprInner::VectorUpdate(_, _, _) => todo!(),
-        ExprInner::VectorSlice(_, _, _) => todo!(),
+        ExprInner::VectorUpdate(vec, i, val) => Mil::TriOp(
+            mil2::TriOp::Vupdate,
+            codegen_expr(vec).into(),
+            codegen_expr(i).into(),
+            codegen_expr(val).into(),
+        ),
+        ExprInner::VectorSlice(vec, i, j) => Mil::TriOp(
+            mil2::TriOp::Vslice,
+            codegen_expr(vec).into(),
+            codegen_expr(i).into(),
+            codegen_expr(j).into(),
+        ),
         ExprInner::Fail => todo!(),
     }
 }
@@ -221,7 +231,7 @@ mod tests {
                             if y is [Nat] then
                                 y[0]
                             else
-                                [y, 2]
+                                [y, 2][0 => 2]
                         
                         ---
                         
