@@ -1,1 +1,5 @@
-1
+def __dyn_append(x: Any): Any = 
+    if x is [Any..] then
+        x ++ x
+    else
+        0

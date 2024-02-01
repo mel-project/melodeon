@@ -48,6 +48,8 @@ fn codegen_expr(expr: &Expr) -> Mil {
                 BinOp::Div => mil2::BinOp::Div,
                 BinOp::Mod => mil2::BinOp::Rem,
                 BinOp::Expt => mil2::BinOp::Exp,
+                BinOp::Vappend => mil2::BinOp::Vappend,
+                BinOp::Bappend => mil2::BinOp::Bappend,
                 BinOp::Append => {
                     return Mil::Call(Mil::Var("__dyn_append".into()).into(), vec![x, y].into())
                 }
@@ -144,7 +146,10 @@ fn is_type_checker(t: &Type) -> Mil {
         ),
         Type::Bytes => Mil::Var("__istype_bytes".into()),
         Type::Struct(_, _) => todo!(),
-        Type::Union(_, _) => todo!(),
+        Type::Union(t, u) => Mil::Call(
+            Mil::Var("__istype_union".into()).into(),
+            vec![is_type_checker(t), is_type_checker(u)].into(),
+        ),
         Type::Lambda {
             free_vars: _,
             args: _,

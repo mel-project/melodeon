@@ -133,6 +133,9 @@ pub enum BinOp {
 
     Append,
 
+    Vappend,
+    Bappend,
+
     Eq,
     Lt,
     Le,

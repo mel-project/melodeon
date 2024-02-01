@@ -2,7 +2,7 @@
 reserved    = @{"let" | "in" | "if" | "else" | "for" | "fold" | "cast" | "ann" | "loop" | "is" | "do" | "done" | "set!" | "fail!" | "struct" | "require" | "provide" | "transmute" | "collect" | "with" | "type" | "extern" | "call" | "untagged" }
 nat_literal = @{ ASCII_DIGIT+ }
 type_name   = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_") *  }
-var_name    = @{ (!reserved ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*) |
+var_name    = @{ (!reserved ~ (ASCII_ALPHA_LOWER | "_") ~ (ASCII_ALPHANUMERIC | "_")*) |
 		  (reserved ~ var_name) }
 
 add         = {"+"}
@@ -83,7 +83,7 @@ type_terminal = _{
     "(" ~ type_expr ~ ")"
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" }
-type_dynvectorof = { "[" ~ type_expr ~ ";" ~ "]" }
+type_dynvectorof = { "[" ~ type_expr ~ ".." ~ "]" }
 type_dynbytes = {"%[" ~ "]" }
 type_lambda = { "(" ~ (type_expr ~ ",")* ~ type_expr? ~ ")" ~ "->" ~ type_expr }
 
