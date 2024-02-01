@@ -274,6 +274,13 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
         RawExpr::LitBytes(b) => RawExpr::LitBytes(b),
         RawExpr::LitBVec(vv) => RawExpr::LitBVec(vv.into_iter().map(recurse).collect()),
         RawExpr::Unsafe(s) => RawExpr::Unsafe(recurse(s)),
+        RawExpr::Lambda(args, body) => {
+            let mut inner_no_mangle = no_mangle.clone();
+            for inner in args.iter() {
+                inner_no_mangle.insert(*inner.name);
+            }
+            RawExpr::Lambda(args.clone(), mangle_expr(body, source, &inner_no_mangle))
+        }
     }
     .with_ctx(ctx)
 }
@@ -306,8 +313,9 @@ fn mangle_type_expr(
         RawTypeExpr::Vector(v) => RawTypeExpr::Vector(v.into_iter().map(recurse).collect()),
 
         RawTypeExpr::DynVectorof(v) => RawTypeExpr::DynVectorof(recurse(v)),
-
-        RawTypeExpr::DynBytes => RawTypeExpr::DynBytes,
+        RawTypeExpr::Lambda(args, rettype) => {
+            RawTypeExpr::Lambda(args.into_iter().map(recurse).collect(), recurse(rettype))
+        }
     }
     .with_ctx(bind.ctx())
 }

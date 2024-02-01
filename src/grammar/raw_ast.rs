@@ -50,7 +50,7 @@ pub enum RawTypeExpr {
     Union(Ctx<Self>, Ctx<Self>),
     Vector(List<Ctx<Self>>),
     DynVectorof(Ctx<Self>),
-    DynBytes,
+    Lambda(List<Ctx<Self>>, Ctx<Self>),
 }
 
 /// A raw expression.
@@ -72,6 +72,7 @@ pub enum RawExpr {
     Var(Symbol),
 
     Apply(Ctx<Self>, Map<Symbol, Ctx<RawTypeExpr>>, List<Ctx<Self>>),
+    Lambda(List<Ctx<RawTypeBind>>, Ctx<Self>),
 
     Field(Ctx<Self>, Ctx<Symbol>),
     VectorRef(Ctx<Self>, Ctx<Self>),
@@ -113,6 +114,8 @@ pub enum BinOp {
     Rshift,
 
     Append,
+    Bappend,
+    Vappend,
 
     Eq,
     Le,
@@ -228,8 +231,7 @@ fn typebind_parents(tb: &RawTypeExpr) -> Set<Symbol> {
         RawTypeExpr::Vector(l) => l.iter().fold(Set::new(), |acc, t| acc.union(rec(t))),
 
         RawTypeExpr::DynVectorof(v) => rec(v),
-
-        RawTypeExpr::DynBytes => Set::new(),
+        RawTypeExpr::Lambda(args, ret) => todo!(),
     }
 }
 
@@ -285,5 +287,6 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::AsType(a, t) | RawExpr::Transmute(a, t) => rec(a).union(typebind_parents(t)),
         RawExpr::LitBytes(_) => Set::new(),
         RawExpr::Unsafe(s) => rec(s),
+        RawExpr::Lambda(_, _) => todo!(),
     }
 }

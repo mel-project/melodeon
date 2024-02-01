@@ -1,5 +1,10 @@
 def __dyn_append(x: Any): Any = 
     if x is [Any..] then
-        x ++ x
+        x +^+ x
+    else if x is Bytes then
+        x +|+ x
     else
         0
+
+def __istype_vectorof(inner: (Any) -> Nat): (Any) -> Nat = 
+    (possible_vector: Any) -> 3

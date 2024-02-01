@@ -206,7 +206,17 @@ fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
         }
         Rule::type_name => RawTypeExpr::Sym(Symbol::from(pair.as_str())).with_ctx(ctx),
 
-        Rule::type_dynbytes => RawTypeExpr::DynBytes.with_ctx(ctx),
+        Rule::type_lambda => {
+            let mut children = pair.into_inner();
+            let arg_types = children
+                .next()
+                .unwrap()
+                .into_inner()
+                .map(|c| parse_type_expr(c, source))
+                .collect();
+            let return_type = parse_type_expr(children.next().unwrap(), source);
+            RawTypeExpr::Lambda(arg_types, return_type).with_ctx(ctx)
+        }
 
         _ => unreachable!(),
     }
@@ -321,6 +331,8 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                                 Rule::modulo => BinOp::Mod,
                                 Rule::equal => BinOp::Eq,
                                 Rule::append => BinOp::Append,
+                                Rule::vappend => BinOp::Vappend,
+                                Rule::bappend => BinOp::Bappend,
                                 Rule::land => BinOp::Land,
                                 Rule::lor => BinOp::Lor,
                                 Rule::le => BinOp::Le,
@@ -434,17 +446,11 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             RawExpr::IsType(Symbol::from(var_name.as_str()), type_expr).with_ctx(ctx)
         }
         Rule::vector_literal => {
-            let children = pair
-                .into_inner()
-                .map(|c| parse_expr(c, source))
-                .collect();
+            let children = pair.into_inner().map(|c| parse_expr(c, source)).collect();
             RawExpr::LitVec(children).with_ctx(ctx)
         }
         Rule::bytes_literal => {
-            let children = pair
-                .into_inner()
-                .map(|c| parse_expr(c, source))
-                .collect();
+            let children = pair.into_inner().map(|c| parse_expr(c, source)).collect();
             RawExpr::LitBVec(children).with_ctx(ctx)
         }
 
@@ -470,6 +476,14 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             RawExpr::LitBytes(decoded.into()).with_ctx(ctx)
         }
         Rule::EOI => RawExpr::LitNum(U256::from(0u8)).with_ctx(None),
+        Rule::lambda_expr => {
+            let mut children = pair.into_inner();
+            let args = children.next().unwrap();
+            let args = parse_fun_args(args, source);
+            let body = parse_expr(children.next().unwrap(), source);
+            RawExpr::Lambda(args, body.into()).with_ctx(ctx)
+        }
+
         _ => unreachable!(),
     }
 }

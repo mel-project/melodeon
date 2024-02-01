@@ -76,7 +76,7 @@ impl Expr {
 pub enum ExprInner {
     BinOp(BinOp, Arc<Expr>, Arc<Expr>),
     UniOp(UniOp, Arc<Expr>),
-    /// The first one is an **upper bound** for how big the exponent is
+
     If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
     //Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     Let(List<(Symbol, Arc<Expr>)>, Arc<Expr>),
@@ -93,6 +93,8 @@ pub enum ExprInner {
     VectorRef(Arc<Expr>, Arc<Expr>),
     VectorUpdate(Arc<Expr>, Arc<Expr>, Arc<Expr>),
     VectorSlice(Arc<Expr>, Arc<Expr>, Arc<Expr>),
+
+    Lambda(List<(Symbol, Type)>, Arc<Expr>),
 
     Fail,
 }

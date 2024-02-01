@@ -8,6 +8,8 @@ var_name    = @{ (!reserved ~ (ASCII_ALPHA_LOWER | "_") ~ (ASCII_ALPHANUMERIC | 
 add         = {"+"}
 sub         = {"-"}
 append      = {"++"}
+bappend     = {"+|+"}
+vappend     = {"+^+"}
 exp         = {"**"}
 mul         = {"*"}
 div         = {"/"}
@@ -26,6 +28,7 @@ gt          = {">"}
 ge          = {">="}
 lt          = {"<"}
 le          = {"<="}
+typeq       = {"typeq"}
 string_literal = ${ "\"" ~ inner ~ "\"" }
 inner = @{ char* }
 char = {
@@ -77,14 +80,12 @@ type_terminal = _{
     type_vector             |
     type_dynvectorof	    |
     type_name               |
-    type_dynbytes           |
     type_lambda             |
 
     "(" ~ type_expr ~ ")"
 }
 type_vector = { "[" ~ (type_expr ~ ",")* ~ type_expr? ~ "]" }
 type_dynvectorof = { "[" ~ type_expr ~ ".." ~ "]" }
-type_dynbytes = {"%[" ~ "]" }
 type_lambda = { "(" ~ (type_expr ~ ",")* ~ type_expr? ~ ")" ~ "->" ~ type_expr }
 
 
@@ -130,9 +131,9 @@ logic_expr    = { bitlogic_expr ~ ((lor | land) ~ bitlogic_expr)*}
 bitlogic_expr = { rel_expr ~ ((bor | band | bxor) ~ rel_expr)*}
 rel_expr    = { shift_expr ~ ((equal | le | lt | ge | gt) ~ shift_expr)* }
 shift_expr  = { add_expr ~ ((lshift | rshift) ~ add_expr)* }
-add_expr    = { mult_expr ~ ((append | add | sub) ~ mult_expr)* }
+add_expr    = { mult_expr ~ ((append | vappend | bappend | add | sub) ~ mult_expr)* }
 mult_expr   = { uni_expr ~ ((exp | mul | div | modulo) ~ uni_expr)* }
-uni_expr    = { ((lnot | bnot) ~ apply_expr) | apply_expr }
+uni_expr    = { ((lnot | bnot | typeq) ~ apply_expr) | apply_expr }
 apply_expr  = {
     terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type | tfish_call_args)*
 }
@@ -177,4 +178,4 @@ for_literal	        = { "[" ~ expr ~ "for" ~ var_name ~ "in" ~ expr ~ "]" }
 extern_expr		    = { "extern" ~ string_literal }
 extern_call_expr    = { "extern" ~ "call" ~ string_literal ~ call_args }
 unsafe_expr         = { "unsafe" ~ expr }
-lambda_expr = { "(" ~ (var_name ~ ",")* ~ var_name? ~ ")" ~ "->" ~ expr}
+lambda_expr = { "(" ~ fun_args ~ ")" ~ "->" ~ expr}

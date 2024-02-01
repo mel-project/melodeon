@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 
 use anyhow::Context;
 
@@ -349,7 +349,10 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                         TypeFacts::empty(),
                     ))
                 }
-                crate::grammar::BinOp::Append => {
+                // this is not strictly correct, but this will do since +^+ and +|+ are undocumented and hopefully not going to be used by users
+                crate::grammar::BinOp::Append
+                | crate::grammar::BinOp::Vappend
+                | crate::grammar::BinOp::Bappend => {
                     // vector append
                     let a_expr = a_expr?;
                     let b_expr = b_expr?;
@@ -389,7 +392,16 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                     Ok((
                         Expr {
                             itype: result,
-                            inner: ExprInner::BinOp(BinOp::Append, a_expr.into(), b_expr.into()),
+                            inner: ExprInner::BinOp(
+                                match op {
+                                    crate::grammar::BinOp::Append => BinOp::Append,
+                                    crate::grammar::BinOp::Vappend => BinOp::Vappend,
+                                    crate::grammar::BinOp::Bappend => BinOp::Bappend,
+                                    _ => unreachable!(),
+                                },
+                                a_expr.into(),
+                                b_expr.into(),
+                            ),
                         },
                         TypeFacts::empty(),
                     ))
@@ -790,6 +802,22 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
             Ok((ExprInner::LitBVec(args).wrap(itype), TypeFacts::empty()))
         }
         RawExpr::Unsafe(s) => typecheck_expr(state.bind_safety(false), s),
+        RawExpr::Lambda(args, inner) => {
+            let args = args
+                .into_iter()
+                .map(|bind| Ok((*bind.name, typecheck_type_expr(&state, bind.bind.clone())?)))
+                .collect::<CtxResult<List<_>>>()?;
+            let inner = typecheck_expr(state, inner)?;
+            let itype = Type::Lambda {
+                free_vars: vec![],
+                args: args.iter().map(|a| a.1.clone()).collect(),
+                result: inner.0.itype.clone().into(),
+            };
+            Ok((
+                ExprInner::Lambda(args, inner.0.into()).wrap(itype),
+                TypeFacts::empty(),
+            ))
+        }
     }
 }
 
@@ -814,6 +842,8 @@ fn typecheck_type_expr(state: &Scope, raw: Ctx<RawTypeExpr>) -> CtxResult<Type> 
         RawTypeExpr::Sym(s) => {
             if s == Symbol::from("Nat") {
                 Ok(Type::Nat)
+            } else if s == Symbol::from("Bytes") {
+                Ok(Type::Bytes)
             } else if s == Symbol::from("Any") {
                 Ok(Type::Any)
             } else if s == Symbol::from("Nothing") {
@@ -828,6 +858,7 @@ fn typecheck_type_expr(state: &Scope, raw: Ctx<RawTypeExpr>) -> CtxResult<Type> 
         RawTypeExpr::Union(a, b) => {
             Ok(typecheck_type_expr(state, a)?.smart_union(&typecheck_type_expr(state, b)?))
         }
+
         RawTypeExpr::Vector(tt) => {
             let processed_tt: CtxResult<List<_>> = tt
                 .into_iter()
@@ -836,12 +867,23 @@ fn typecheck_type_expr(state: &Scope, raw: Ctx<RawTypeExpr>) -> CtxResult<Type> 
             Ok(Type::Vector(processed_tt?))
         }
 
+        RawTypeExpr::Lambda(args, ret) => {
+            let args: CtxResult<List<_>> = args
+                .into_iter()
+                .map(|t| typecheck_type_expr(state, t))
+                .collect();
+            let ret = typecheck_type_expr(state, ret)?;
+            Ok(Type::Lambda {
+                free_vars: vec![],
+                args: args?,
+                result: Arc::new(ret),
+            })
+        }
+
         RawTypeExpr::DynVectorof(v) => {
             let v = typecheck_type_expr(state, v)?;
             Ok(Type::Vectorof(v.into()))
         }
-
-        RawTypeExpr::DynBytes => Ok(Type::Bytes),
     }
 }
 

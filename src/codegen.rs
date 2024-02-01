@@ -127,6 +127,10 @@ fn codegen_expr(expr: &Expr) -> Mil {
             codegen_expr(j).into(),
         ),
         ExprInner::Fail => todo!(),
+        ExprInner::Lambda(args, body) => Mil::Lambda(
+            args.iter().map(|s| s.0.to_smolstr()).collect(),
+            codegen_expr(body).into(),
+        ),
     }
 }
 
