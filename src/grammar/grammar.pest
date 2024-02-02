@@ -28,7 +28,9 @@ gt          = {">"}
 ge          = {">="}
 lt          = {"<"}
 le          = {"<="}
-typeq       = {"typeq"}
+typeq       = {"__typeq"}
+vlen        = {"__vlen"}
+blen        = {"__blen"}
 string_literal = ${ "\"" ~ inner ~ "\"" }
 inner = @{ char* }
 char = {
@@ -133,7 +135,7 @@ rel_expr    = { shift_expr ~ ((equal | le | lt | ge | gt) ~ shift_expr)* }
 shift_expr  = { add_expr ~ ((lshift | rshift) ~ add_expr)* }
 add_expr    = { mult_expr ~ ((append | vappend | bappend | add | sub) ~ mult_expr)* }
 mult_expr   = { uni_expr ~ ((exp | mul | div | modulo) ~ uni_expr)* }
-uni_expr    = { ((lnot | bnot | typeq) ~ apply_expr) | apply_expr }
+uni_expr    = { ((lnot | bnot | typeq | vlen | blen) ~ apply_expr) | apply_expr }
 apply_expr  = {
     terminal_expr ~ (call_args | field_access | vector_ref | vector_slice | vector_update | as_type | into_type | tfish_call_args)*
 }

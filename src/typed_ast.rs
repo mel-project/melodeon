@@ -121,6 +121,9 @@ impl ExprInner {
 #[derive(Clone, Copy, Debug)]
 pub enum UniOp {
     Bnot,
+    TypeQ,
+    Vlen,
+    Blen,
 }
 
 /// Binary operator

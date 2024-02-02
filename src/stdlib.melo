@@ -6,5 +6,20 @@ def __dyn_append(x: Any): Any =
     else
         0
 
+
+def __istype_vectorof_helper(inner: (Any) -> Nat, v: [Any..]): Nat =
+    let vector_length = __vlen v in
+    if vector_length == 0 then
+        1
+    else
+        inner(v[0]) 
+
 def __istype_vectorof(inner: (Any) -> Nat): (Any) -> Nat = 
-    (possible_vector: Any) -> 3
+    (possible_vector: Any) -> 
+        if __typeq possible_vector == 0 then 
+            1 
+        else
+            let vector = unsafe possible_vector :! [Any..] in
+            __istype_vectorof_helper(inner, vector)
+---
+2

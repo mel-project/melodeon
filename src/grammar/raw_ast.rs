@@ -92,6 +92,9 @@ pub enum RawExpr {
 pub enum UniOp {
     Bnot,
     Lnot,
+    TypeQ,
+    Vlen,
+    Blen,
 }
 
 /// Binary operator

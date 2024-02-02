@@ -316,6 +316,21 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
                         let e = parse_expr(child.clone(), source);
                         RawExpr::UniOp(UniOp::Lnot.with_ctx(ctx), e).with_ctx(ctx)
                     }
+                    Rule::typeq => {
+                        let child = children.remove(0);
+                        let e = parse_expr(child.clone(), source);
+                        RawExpr::UniOp(UniOp::TypeQ.with_ctx(ctx), e).with_ctx(ctx)
+                    }
+                    Rule::vlen => {
+                        let child = children.remove(0);
+                        let e = parse_expr(child.clone(), source);
+                        RawExpr::UniOp(UniOp::Vlen.with_ctx(ctx), e).with_ctx(ctx)
+                    }
+                    Rule::blen => {
+                        let child = children.remove(0);
+                        let e = parse_expr(child.clone(), source);
+                        RawExpr::UniOp(UniOp::Blen.with_ctx(ctx), e).with_ctx(ctx)
+                    }
                     _ => unreachable!(),
                 }
             } else {

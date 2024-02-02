@@ -481,6 +481,28 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                 Ok::<_, CtxErr>(())
             };
             match op {
+                crate::grammar::UniOp::TypeQ => Ok((
+                    Expr {
+                        itype: Type::Nat,
+                        inner: ExprInner::UniOp(UniOp::TypeQ, a_expr?.into()),
+                    },
+                    TypeFacts::empty(),
+                )),
+                // TODO: typechecking?
+                crate::grammar::UniOp::Vlen => Ok((
+                    Expr {
+                        itype: Type::Nat,
+                        inner: ExprInner::UniOp(UniOp::Vlen, a_expr?.into()),
+                    },
+                    TypeFacts::empty(),
+                )),
+                crate::grammar::UniOp::Blen => Ok((
+                    Expr {
+                        itype: Type::Nat,
+                        inner: ExprInner::UniOp(UniOp::Blen, a_expr?.into()),
+                    },
+                    TypeFacts::empty(),
+                )),
                 crate::grammar::UniOp::Bnot => {
                     check_nat()?;
                     Ok((
@@ -807,7 +829,8 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                 .into_iter()
                 .map(|bind| Ok((*bind.name, typecheck_type_expr(&state, bind.bind.clone())?)))
                 .collect::<CtxResult<List<_>>>()?;
-            let inner = typecheck_expr(state, inner)?;
+
+            let inner = typecheck_expr(state.clone().bind_vars(args.clone()), inner)?;
             let itype = Type::Lambda {
                 free_vars: vec![],
                 args: args.iter().map(|a| a.1.clone()).collect(),
@@ -872,10 +895,11 @@ fn typecheck_type_expr(state: &Scope, raw: Ctx<RawTypeExpr>) -> CtxResult<Type> 
                 .into_iter()
                 .map(|t| typecheck_type_expr(state, t))
                 .collect();
+            let args = args?;
             let ret = typecheck_type_expr(state, ret)?;
             Ok(Type::Lambda {
                 free_vars: vec![],
-                args: args?,
+                args,
                 result: Arc::new(ret),
             })
         }

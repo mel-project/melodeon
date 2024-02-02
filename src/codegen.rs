@@ -75,6 +75,9 @@ fn codegen_expr(expr: &Expr) -> Mil {
         ExprInner::UniOp(op, inner) => {
             let op = match op {
                 UniOp::Bnot => mil2::UniOp::Bnot,
+                UniOp::TypeQ => mil2::UniOp::TypeQ,
+                UniOp::Vlen => mil2::UniOp::Vlen,
+                UniOp::Blen => mil2::UniOp::Blen,
             };
             Mil::UniOp(op, codegen_expr(inner).into())
         }
