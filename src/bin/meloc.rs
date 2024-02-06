@@ -11,6 +11,8 @@ use melodeon::{
     demod::Demodularizer,
     typesys::typecheck_program,
 };
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 #[derive(FromArgs)]
 /// Low-level melodeon compiler
@@ -30,6 +32,15 @@ struct Args {
 }
 
 fn main() {
+    // a builder for `FmtSubscriber`.
+    let subscriber = FmtSubscriber::builder()
+        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
+        // will be written to stdout.
+        .with_max_level(Level::TRACE)
+        .with_writer(std::io::stderr)
+        // completes the builder.
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     let args: Args = argh::from_env();
     if !args.no_logs {
         init_logs();
@@ -49,8 +60,12 @@ fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
         loader.demod(ModuleId::from_path(Path::new(&args.input)), &root)
     })?;
     let tchecked = time_stage("typecheck", || typecheck_program(raw_input))?;
-    let product = time_stage("codegen", || codegen_program(tchecked));
-    println!("{:?}", product);
+    let product = time_stage("codegen", || codegen_program(tchecked).enclose().unwrap());
+    println!(
+        "{}",
+        serde_yaml::to_string(&serde_json::to_value(&product).unwrap()).unwrap()
+    );
+    println!("{:?}", product.eval());
     Ok(())
 }
 

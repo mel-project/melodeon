@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::{borrow::Cow, fmt::Debug};
+use std::{ops::Deref, sync::Arc};
 use tap::Tap;
 
 use crate::containers::{List, Map, Set, Symbol};
@@ -373,6 +373,27 @@ impl Type {
                         .map(|(x, y)| Type::Union(x.into(), y.into()))
                         .collect(),
                 ))
+            }
+            _ => None,
+        }
+    }
+
+    /// Interpret a vector type as a dynamic vector, returning
+    pub fn try_vectorof_inner(&self) -> Option<Self> {
+        match self {
+            Type::Vectorof(t) => Some(t.deref().clone()),
+            Type::Vector(inner) => {
+                if inner.is_empty() {
+                    Some(Type::Nothing)
+                } else {
+                    let u = inner.iter().fold(Type::Nothing, |a, b| a.smart_union(b));
+                    Some(u)
+                }
+            }
+            Type::Union(x, y) => {
+                let x = x.try_vectorof_inner()?;
+                let y = y.try_vectorof_inner()?;
+                Some(x.smart_union(&y))
             }
             _ => None,
         }

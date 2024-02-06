@@ -69,6 +69,7 @@ fn codegen_expr(expr: &Expr) -> Mil {
                 BinOp::Bxor => mil2::BinOp::Bxor,
                 BinOp::Lshift => mil2::BinOp::Lshift,
                 BinOp::Rshift => mil2::BinOp::Rshift,
+                BinOp::NumEq => mil2::BinOp::Eql,
             };
             Mil::BinOp(op, x.into(), y.into())
         }
@@ -139,9 +140,9 @@ fn codegen_expr(expr: &Expr) -> Mil {
 
 fn is_type_checker(t: &Type) -> Mil {
     match t {
-        Type::Nothing => Mil::Number(U256::ZERO),
-        Type::Any => Mil::Number(U256::ONE),
-        Type::Var(_) => Mil::Number(U256::ZERO),
+        Type::Nothing => Mil::Lambda(vec!["_".into()].into(), Mil::Number(U256::ZERO).into()),
+        Type::Any => Mil::Lambda(vec!["_".into()].into(), Mil::Number(U256::ONE).into()),
+        Type::Var(_) => Mil::Lambda(vec!["_".into()].into(), Mil::Number(U256::ZERO).into()),
         Type::Nat => Mil::Var("__istype_nat".into()),
         Type::Vector(inner) => Mil::Call(
             Mil::Var("__istype_vector_by_idx".into()).into(),

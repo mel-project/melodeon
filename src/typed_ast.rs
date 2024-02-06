@@ -142,6 +142,7 @@ pub enum BinOp {
     Bappend,
 
     Eq,
+    NumEq,
     Lt,
     Le,
     Gt,

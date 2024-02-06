@@ -24,6 +24,7 @@ band        = {"&"}
 bxor        = {"^"}
 bnot        = {"~"}
 equal       = {"=="}
+num_equal   = {"==="}
 gt          = {">"}
 ge          = {">="}
 lt          = {"<"}
@@ -131,7 +132,7 @@ bin_expr = _{
 // This does require a bit of postprocessing (basically a fold) to turn into a binary form.
 logic_expr    = { bitlogic_expr ~ ((lor | land) ~ bitlogic_expr)*}
 bitlogic_expr = { rel_expr ~ ((bor | band | bxor) ~ rel_expr)*}
-rel_expr    = { shift_expr ~ ((equal | le | lt | ge | gt) ~ shift_expr)* }
+rel_expr    = { shift_expr ~ ((num_equal | equal | le | lt | ge | gt) ~ shift_expr)* }
 shift_expr  = { add_expr ~ ((lshift | rshift) ~ add_expr)* }
 add_expr    = { mult_expr ~ ((append | vappend | bappend | add | sub) ~ mult_expr)* }
 mult_expr   = { uni_expr ~ ((exp | mul | div | modulo) ~ uni_expr)* }

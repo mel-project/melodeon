@@ -210,15 +210,16 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
         }
         RawExpr::If(c, x, y) => {
             let (c, c_facts) = recurse(c)?;
-            let not_c_facts = c_facts.clone().negate_against(&state);
-            let (x, _x_facts) = typecheck_expr(state.clone().with_facts(&c_facts), x)?;
+            eprintln!("c_facts = {:?}", c_facts);
+            let not_c_facts: TypeFacts = c_facts.clone().negate_against(&state);
+            let (x, x_facts) = typecheck_expr(state.clone().with_facts(&c_facts), x)?;
             let (y, _y_facts) = typecheck_expr(state.clone().with_facts(&not_c_facts), y)?;
             Ok((
                 Expr {
                     itype: x.itype.smart_union(&y.itype),
                     inner: ExprInner::If(c.into(), x.into(), y.into()),
                 },
-                TypeFacts::empty(),
+                c_facts.union(x_facts),
             ))
         }
         RawExpr::BinOp(op, a, b) => {
@@ -229,8 +230,8 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
             let check_nats = || {
                 let a_expr = a_expr.as_ref().map_err(|e| e.clone())?;
                 let b_expr = b_expr.as_ref().map_err(|e| e.clone())?;
-                assert_subtype(ctx, &a_expr.itype, &Type::Nat)?;
-                assert_subtype(ctx, &b_expr.itype, &Type::Nat)?;
+                assert_subtype(a.ctx(), &a_expr.itype, &Type::Nat)?;
+                assert_subtype(b.ctx(), &b_expr.itype, &Type::Nat)?;
 
                 Ok::<_, CtxErr>(())
             };
@@ -299,16 +300,23 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                         TypeFacts::empty(),
                     ))
                 }
-                crate::grammar::BinOp::Eq => {
+                crate::grammar::BinOp::NumEq => {
                     check_nats()?;
                     Ok((
                         Expr {
                             itype: Type::Nat,
-                            inner: ExprInner::BinOp(BinOp::Eq, a_expr?.into(), b_expr?.into()),
+                            inner: ExprInner::BinOp(BinOp::NumEq, a_expr?.into(), b_expr?.into()),
                         },
                         TypeFacts::empty(),
                     ))
                 }
+                crate::grammar::BinOp::Eq => Ok((
+                    Expr {
+                        itype: Type::Nat,
+                        inner: ExprInner::BinOp(BinOp::Eq, a_expr?.into(), b_expr?.into()),
+                    },
+                    TypeFacts::empty(),
+                )),
                 crate::grammar::BinOp::Lt => {
                     check_nats()?;
                     Ok((
@@ -687,19 +695,7 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
             }
         }
         RawExpr::IsType(x, y) => {
-            // let orig_type = state
-            //     .lookup_var(x)
-            //     .context("undefined variable")
-            //     .err_ctx(ctx)?;
             let t = typecheck_type_expr(&state, y)?;
-            // if !t.subtype_of(&orig_type) {
-            //     return Err(anyhow::anyhow!(
-            //         "type check always fails because {:?} is not a subtype of {:?}",
-            //         t,
-            //         orig_type
-            //     )
-            //     .with_ctx(ctx));
-            // }
             Ok((
                 Expr {
                     itype: Type::Nat,
@@ -740,8 +736,24 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
             ))
         }
 
-        RawExpr::VectorSlice(_v, _l, _r) => {
-            todo!()
+        RawExpr::VectorSlice(v, l, r) => {
+            let (v, _) = recurse(v)?;
+            Ok((
+                Expr {
+                    itype: Type::Vectorof(
+                        v.itype
+                            .try_vectorof_inner()
+                            .context(format!("{:?} is not a vector", v.itype))?
+                            .into(),
+                    ),
+                    inner: ExprInner::VectorSlice(
+                        v.into(),
+                        recurse(l)?.0.into(),
+                        recurse(r)?.0.into(),
+                    ),
+                },
+                TypeFacts::empty(),
+            ))
         }
         RawExpr::LitStruct(name, fields) => {
             let stype = state

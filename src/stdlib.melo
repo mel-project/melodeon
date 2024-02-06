@@ -1,3 +1,26 @@
+def __dyn_equal(x: Any, y: Any): Nat =
+    if x is Nat && y is Nat then
+        x === y
+    else if x is [Any..] && y is [Any..] then
+        __vector_equal(x, y)
+    # else if x is Bytes && y is Bytes then
+    #     __bytes_equal(x, y)
+    else 0
+
+def __vector_equal(x: [Any..], y: [Any..]): Nat =
+    let x_len = __vlen x in
+    let y_len = __vlen y in
+    if x_len === y_len then
+        if x_len == 0 then
+            1
+        else
+            x[0] == y[0] && __vector_equal(x[1..x_len], y[1..y_len])
+    else 0
+
+def __istype_nat(x: Any): Nat = __typeq x === 0
+
+def __istype_bytes(x: Any): Nat = __typeq x === 1
+
 def __dyn_append(x: Any): Any = 
     if x is [Any..] then
         x +^+ x
@@ -12,12 +35,12 @@ def __istype_vectorof_helper(inner: (Any) -> Nat, v: [Any..]): Nat =
     if vector_length == 0 then
         1
     else
-        inner(v[0]) 
+        inner(v[0]) && __istype_vectorof_helper(inner, v[1..vector_length])
 
 def __istype_vectorof(inner: (Any) -> Nat): (Any) -> Nat = 
     (possible_vector: Any) -> 
-        if __typeq possible_vector == 0 then 
-            1 
+        if !(__typeq possible_vector == 2) then 
+            0
         else
             let vector = unsafe possible_vector :! [Any..] in
             __istype_vectorof_helper(inner, vector)

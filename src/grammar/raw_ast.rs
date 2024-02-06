@@ -121,6 +121,7 @@ pub enum BinOp {
     Vappend,
 
     Eq,
+    NumEq,
     Le,
     Lt,
     Ge,
