@@ -21,11 +21,11 @@ def __istype_nat(x: Any): Nat = __typeq x === 0
 
 def __istype_bytes(x: Any): Nat = __typeq x === 1
 
-def __dyn_append(x: Any): Any = 
-    if x is [Any..] then
-        x +^+ x
-    else if x is Bytes then
-        x +|+ x
+def __dyn_append(x: Any, y: Any): Any = 
+    if x is [Any..] && y is [Any..] then
+        x +^+ y
+    else if x is Bytes && y is Bytes then
+        x +|+ y
     else
         0
 

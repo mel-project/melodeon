@@ -46,6 +46,8 @@ mil2={path="../mil2"}
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 
+melvm = {path="../melstf/lib/melvm"}
+
 [dev-dependencies]
 env_logger="0.9"
 

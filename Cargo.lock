@@ -726,6 +726,7 @@ dependencies = [
  "lexpr",
  "log",
  "maplit",
+ "melvm",
  "mil2",
  "once_cell",
  "pest",
