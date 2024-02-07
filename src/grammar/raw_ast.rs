@@ -72,6 +72,7 @@ pub enum RawExpr {
     Var(Symbol),
 
     Apply(Ctx<Self>, Map<Symbol, Ctx<RawTypeExpr>>, List<Ctx<Self>>),
+    ExternCall(Symbol, List<Ctx<Self>>),
     Lambda(List<Ctx<RawTypeBind>>, Ctx<Self>),
 
     Field(Ctx<Self>, Ctx<Symbol>),
@@ -92,9 +93,6 @@ pub enum RawExpr {
 pub enum UniOp {
     Bnot,
     Lnot,
-    TypeQ,
-    Vlen,
-    Blen,
 }
 
 /// Binary operator
@@ -268,6 +266,9 @@ fn expr_parents(expr: &RawExpr) -> Set<Symbol> {
         RawExpr::Apply(fn_name, _, args) => args
             .iter()
             .fold(rec(fn_name), |acc, arg| acc.union(rec(arg))),
+        RawExpr::ExternCall(_, args) => {
+            args.iter().fold(Set::new(), |acc, arg| acc.union(rec(arg)))
+        }
         RawExpr::LitStruct(s_name, fields) => fields
             .values()
             .fold(Set::unit(*s_name), |acc, field| acc.union(rec(field))),

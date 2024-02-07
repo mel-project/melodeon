@@ -281,6 +281,9 @@ fn mangle_expr(expr: Ctx<RawExpr>, source: ModuleId, no_mangle: &Set<Symbol>) ->
             }
             RawExpr::Lambda(args.clone(), mangle_expr(body, source, &inner_no_mangle))
         }
+        RawExpr::ExternCall(fname, args) => {
+            RawExpr::ExternCall(fname, args.into_iter().map(recurse).collect())
+        }
     }
     .with_ctx(ctx)
 }

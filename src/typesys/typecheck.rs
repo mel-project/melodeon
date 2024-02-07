@@ -489,28 +489,6 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                 Ok::<_, CtxErr>(())
             };
             match op {
-                crate::grammar::UniOp::TypeQ => Ok((
-                    Expr {
-                        itype: Type::Nat,
-                        inner: ExprInner::UniOp(UniOp::TypeQ, a_expr?.into()),
-                    },
-                    TypeFacts::empty(),
-                )),
-                // TODO: typechecking?
-                crate::grammar::UniOp::Vlen => Ok((
-                    Expr {
-                        itype: Type::Nat,
-                        inner: ExprInner::UniOp(UniOp::Vlen, a_expr?.into()),
-                    },
-                    TypeFacts::empty(),
-                )),
-                crate::grammar::UniOp::Blen => Ok((
-                    Expr {
-                        itype: Type::Nat,
-                        inner: ExprInner::UniOp(UniOp::Blen, a_expr?.into()),
-                    },
-                    TypeFacts::empty(),
-                )),
                 crate::grammar::UniOp::Bnot => {
                     check_nat()?;
                     Ok((
@@ -852,6 +830,26 @@ pub fn typecheck_expr(state: Scope, raw: Ctx<RawExpr>) -> CtxResult<(Expr, TypeF
                 ExprInner::Lambda(args, inner.0.into()).wrap(itype),
                 TypeFacts::empty(),
             ))
+        }
+        RawExpr::ExternCall(fname, args) => {
+            if state.lookup_safety() {
+                Err(
+                    anyhow::anyhow!("cannot do an external call without an unsafe context",)
+                        .with_ctx(ctx),
+                )
+            } else {
+                Ok((
+                    ExprInner::ExternCall(
+                        fname,
+                        args.iter()
+                            .cloned()
+                            .map(|a| recurse(a).map(|a| a.0))
+                            .collect::<CtxResult<List<_>>>()?,
+                    )
+                    .wrap(Type::Any),
+                    TypeFacts::empty(),
+                ))
+            }
         }
     }
 }

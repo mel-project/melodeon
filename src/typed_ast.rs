@@ -80,6 +80,7 @@ pub enum ExprInner {
     If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
     //Let(Symbol, Arc<Expr<TVar, CVar>>, Arc<Expr<TVar, CVar>>),
     Let(List<(Symbol, Arc<Expr>)>, Arc<Expr>),
+    ExternCall(Symbol, List<Expr>),
     Apply(Arc<Expr>, List<Expr>),
 
     ApplyGeneric(Arc<Expr>, Map<Symbol, Type>, List<Expr>),
