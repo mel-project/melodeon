@@ -36,15 +36,13 @@ fn main() {
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(Level::TRACE)
+        .with_max_level(Level::DEBUG)
         .with_writer(std::io::stderr)
         // completes the builder.
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     let args: Args = argh::from_env();
-    if !args.no_logs {
-        init_logs();
-    }
+
     let loader = Demodularizer::new_at_fs(Path::new("."), Path::new(&args.lib_dir));
     if let Err(err) = main_inner(args, &loader) {
         eprintln!("{}", err);
@@ -66,6 +64,11 @@ fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
         serde_yaml::to_string(&serde_json::to_value(&product).unwrap()).unwrap()
     );
     println!("{:?}", product.eval());
+    let compiled = mil2::assemble(&mil2::compile_mil(product)?)?;
+    let result = melvm::Covenant::from_ops(&compiled)
+        .debug_execute(&[], 100000)
+        .unwrap();
+    println!("{:?}", result);
     Ok(())
 }
 
