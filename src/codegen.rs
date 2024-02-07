@@ -137,6 +137,8 @@ fn codegen_expr(expr: &Expr) -> Mil {
         ),
         ExprInner::ExternCall(call, args) => match call.to_smolstr().as_str() {
             "vlen" => Mil::UniOp(mil2::UniOp::Vlen, codegen_expr(&args[0]).into()),
+            "blen" => Mil::UniOp(mil2::UniOp::Blen, codegen_expr(&args[0]).into()),
+            "typeq" => Mil::UniOp(mil2::UniOp::TypeQ, codegen_expr(&args[0]).into()),
             _ => panic!("unknown extern call {call}"),
         },
     }

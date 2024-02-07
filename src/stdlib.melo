@@ -1,3 +1,4 @@
+
 def __dyn_equal(x: Any, y: Any): Nat =
     if x is Nat && y is Nat then
         x === y
@@ -8,8 +9,8 @@ def __dyn_equal(x: Any, y: Any): Nat =
     else 0
 
 def __vector_equal(x: [Any..], y: [Any..]): Nat =
-    let x_len = __vlen x in
-    let y_len = __vlen y in
+    let x_len = len(x) in
+    let y_len = len(y) in
     if x_len === y_len then
         if x_len == 0 then
             1
@@ -17,9 +18,9 @@ def __vector_equal(x: [Any..], y: [Any..]): Nat =
             x[0] == y[0] && __vector_equal(x[1..x_len], y[1..y_len])
     else 0
 
-def __istype_nat(x: Any): Nat = __typeq x === 0
+def __istype_nat(x: Any): Nat = unsafe extern call "typeq" (x) :! Nat === 0
 
-def __istype_bytes(x: Any): Nat = __typeq x === 1
+def __istype_bytes(x: Any): Nat = unsafe extern call "typeq" (x) :! Nat === 1
 
 def __dyn_append(x: Any, y: Any): Any = 
     if x is [Any..] && y is [Any..] then
@@ -31,7 +32,7 @@ def __dyn_append(x: Any, y: Any): Any =
 
 
 def __istype_vectorof_helper(inner: (Any) -> Nat, v: [Any..]): Nat =
-    let vector_length = __vlen v in
+    let vector_length = len(v) in
     if vector_length == 0 then
         1
     else
@@ -39,18 +40,18 @@ def __istype_vectorof_helper(inner: (Any) -> Nat, v: [Any..]): Nat =
 
 def __istype_vectorof(inner: (Any) -> Nat): (Any) -> Nat = 
     (possible_vector: Any) -> 
-        if !(__typeq possible_vector == 2) then 
+        if !(unsafe extern call "typeq" (possible_vector) :! Nat == 2) then 
             0
         else
             let vector = unsafe possible_vector :! [Any..] in
             __istype_vectorof_helper(inner, vector)
 
 def __istype_vector_by_idx_helper(checkers: [(Any) -> Nat..], v: [Any..]): Nat =
-    if __vlen checkers === __vlen v then
-        if __vlen checkers === 0 then
+    if len(checkers) === len(v) then
+        if len(checkers) === 0 then
             1
         else
-            checkers[0](v[0]) && __istype_vector_by_idx_helper(checkers[1..__vlen checkers], v[1..__vlen v])
+            checkers[0](v[0]) && __istype_vector_by_idx_helper(checkers[1..len(checkers)], v[1..len(v)])
     else 0
 
 def __istype_vector_by_idx(checkers: [(Any) -> Nat..]): (Any) -> Nat = 
@@ -59,11 +60,8 @@ def __istype_vector_by_idx(checkers: [(Any) -> Nat..]): (Any) -> Nat =
             __istype_vector_by_idx_helper(checkers, possible_vector)
         else 0
 
-def len(x: Bytes | [Any..]) = 
+def len(x: Bytes | [Any..]): Nat = 
     if x is Bytes then
-        __blen x
+        unsafe extern call "blen" (x) :! Nat
     else
-        __vlen x
-
----
-2
+        unsafe extern call "vlen" (x) :! Nat

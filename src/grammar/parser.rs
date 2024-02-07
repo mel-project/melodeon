@@ -360,6 +360,18 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
             }
         }
 
+        Rule::extern_call_expr => {
+            let mut children = pair.into_inner();
+            let fun_name = Symbol::from(
+                snailquote::unescape(children.next().unwrap().as_str())
+                    .unwrap_or_default()
+                    .as_str(),
+            );
+            let arguments = children.next().unwrap().into_inner();
+            let arguments: List<Ctx<RawExpr>> = arguments.map(|a| parse_expr(a, source)).collect();
+            RawExpr::ExternCall(fun_name, arguments).with_ctx(ctx)
+        }
+
         Rule::apply_expr => {
             let mut children = pair.into_inner();
             let mut toret = parse_expr(children.next().unwrap(), source);
