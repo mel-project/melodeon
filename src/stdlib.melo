@@ -44,5 +44,26 @@ def __istype_vectorof(inner: (Any) -> Nat): (Any) -> Nat =
         else
             let vector = unsafe possible_vector :! [Any..] in
             __istype_vectorof_helper(inner, vector)
+
+def __istype_vector_by_idx_helper(checkers: [(Any) -> Nat..], v: [Any..]): Nat =
+    if __vlen checkers === __vlen v then
+        if __vlen checkers === 0 then
+            1
+        else
+            checkers[0](v[0]) && __istype_vector_by_idx_helper(checkers[1..__vlen checkers], v[1..__vlen v])
+    else 0
+
+def __istype_vector_by_idx(checkers: [(Any) -> Nat..]): (Any) -> Nat = 
+    (possible_vector: Any) ->
+        if possible_vector is [Any..] then
+            __istype_vector_by_idx_helper(checkers, possible_vector)
+        else 0
+
+def len(x: Bytes | [Any..]) = 
+    if x is Bytes then
+        __blen x
+    else
+        __vlen x
+
 ---
 2

@@ -12,7 +12,7 @@ use smol_str::ToSmolStr;
 
 /// Generates Mil code (in s-expression format) by traversing a fully monomorphized Program.
 pub fn codegen_program(prog: Program) -> Mil {
-    log::debug!(
+    tracing::debug!(
         "generating code for program with {} monomorphized definitions",
         prog.fun_defs.len()
     );
@@ -146,7 +146,7 @@ fn is_type_checker(t: &Type) -> Mil {
         Type::Nat => Mil::Var("__istype_nat".into()),
         Type::Vector(inner) => Mil::Call(
             Mil::Var("__istype_vector_by_idx".into()).into(),
-            inner.iter().map(is_type_checker).collect(),
+            vec![Mil::List(inner.iter().map(is_type_checker).collect())].into(),
         ),
         Type::Vectorof(inner) => Mil::Call(
             Mil::Var("__istype_vectorof".into()).into(),
@@ -170,23 +170,12 @@ fn is_type_checker(t: &Type) -> Mil {
 mod tests {
     use std::path::Path;
 
-    use log::LevelFilter;
-
     use crate::{context::ModuleId, grammar::parse_program, typesys::typecheck_program};
 
     use super::*;
 
-    fn init_logs() {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .format_timestamp(None)
-            .filter_level(LevelFilter::Trace)
-            .try_init();
-    }
-
     #[test]
     fn simple_test() {
-        init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:?}",
@@ -208,7 +197,6 @@ mod tests {
 
     #[test]
     fn expt_codegen() {
-        init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:?}",
@@ -230,7 +218,6 @@ mod tests {
 
     #[test]
     fn tricky_codegen() {
-        init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:?}",
@@ -262,7 +249,6 @@ mod tests {
 
     #[test]
     fn empty_byte_string() {
-        init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:?}",

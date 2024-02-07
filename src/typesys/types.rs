@@ -79,7 +79,7 @@ impl Type {
 
     /// Subtype relation. Returns true iff `self` is a subtype of `other`.
     pub fn subtype_of(&self, other: &Self) -> bool {
-        log::trace!("checking {:?} <:? {:?}", self, other);
+        tracing::trace!("checking {:?} <:? {:?}", self, other);
         match (self, other) {
             (Type::Nothing, _) => true,
             (_, Type::Any) => true,
@@ -161,7 +161,7 @@ impl Type {
 
     /// Subtracts another type, *conservatively*. That is, it produces a type that includes *at least* all the values that are in `self` but not in `other`, but it may include more in difficult-to-calculate cases.
     pub fn subtract(&self, other: &Self) -> Cow<Self> {
-        log::trace!("subtracting {:?} - {:?}", self, other);
+        tracing::trace!("subtracting {:?} - {:?}", self, other);
         // if we're a subtype of other, we're done
         if self.subtype_of(other) {
             return Cow::Owned(Type::Nothing);
@@ -226,10 +226,10 @@ impl Type {
 
     /// Using the current type (which contains typevars of type TVar) as a template, as well as a different type where the "holes" formed by these typevars are filled, derive a mapping between the free typevars of [self] and types.
     pub fn unify_tvars(&self, other: &Type) -> Option<Map<Symbol, Type>> {
-        log::trace!("unify_tvars {:?} with {:?}", self, other);
+        tracing::trace!("unify_tvars {:?} with {:?}", self, other);
         // First, we find out exactly *where* in self do the typevars appear.
         let locations = self.tvar_locations();
-        log::trace!("found locations: {:?}", locations);
+        tracing::trace!("found locations: {:?}", locations);
         // Then, we index into other to find out what concrete types those tvars represent
         let res = locations
             .into_iter()
@@ -247,7 +247,7 @@ impl Type {
                     .map(|other_piece| (var, other_piece))
             })
             .collect();
-        log::trace!("post unify: {:?}", res);
+        tracing::trace!("post unify: {:?}", res);
         res
     }
 
@@ -397,20 +397,5 @@ impl Type {
             }
             _ => None,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use log::LevelFilter;
-
-    #[test]
-
-    fn init_logs() {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .format_timestamp(None)
-            .filter_level(LevelFilter::Trace)
-            .try_init();
     }
 }

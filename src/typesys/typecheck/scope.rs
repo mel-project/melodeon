@@ -71,10 +71,10 @@ impl Scope {
 
     /// Applies some type facts
     pub fn with_facts(mut self, facts: &TypeFacts) -> Self {
-        log::trace!("with facts {:?}", facts);
+        tracing::trace!("with facts {:?}", facts);
         for (k, v) in facts.iter() {
             if let Some(t) = self.variable_scope.get_mut(k) {
-                log::trace!("applying fact type {:?} to existing {:?}", v, t);
+                tracing::trace!("applying fact type {:?} to existing {:?}", v, t);
                 let new_t = if t.subtype_of(v) {
                     t.clone()
                 } else {

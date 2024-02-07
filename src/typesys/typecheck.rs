@@ -29,7 +29,7 @@ fn assert_subtype(ctx: Option<CtxLocation>, a: &Type, b: &Type) -> CtxResult<()>
 
 /// Typechecks a whole program, resolving free variables fully.
 pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
-    log::debug!(
+    tracing::debug!(
         "typechecking whole program rooted at {:?} with {} defs",
         raw.ctx().map(|ctx| ctx.source.to_string()),
         raw.definitions.len()
@@ -167,7 +167,7 @@ pub fn typecheck_program(raw: Ctx<RawProgram>) -> CtxResult<Program> {
             }
         }
     }
-    log::trace!("initial definitions created: {:?}", fun_defs);
+    tracing::trace!("initial definitions created: {:?}", fun_defs);
     // time to typecheck the expression preliminarily
     let (body, _) = typecheck_expr(scope, raw.body.clone())?;
 
@@ -928,14 +928,11 @@ mod tests {
 
     use std::path::Path;
 
-    use log::LevelFilter;
-
     use super::*;
     use crate::{context::ModuleId, grammar::parse_program};
 
     #[test]
     fn typecheck_simple() {
-        init_logs();
         let state = Scope::new();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
@@ -953,7 +950,6 @@ mod tests {
 
     #[test]
     fn typecheck_tricky() {
-        init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:?}",
@@ -977,7 +973,6 @@ foo()
 
     #[test]
     fn typecheck_whole() {
-        init_logs();
         let module = ModuleId::from_path(Path::new("whatever.melo"));
         eprintln!(
             "{:?}",
@@ -998,13 +993,5 @@ even(200)
             )
             .unwrap()
         );
-    }
-
-    fn init_logs() {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .format_timestamp(None)
-            .filter_level(LevelFilter::Trace)
-            .try_init();
     }
 }

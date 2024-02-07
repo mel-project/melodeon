@@ -37,7 +37,7 @@ impl Demodularizer {
             if let Some(stripped) = mid.strip_prefix('$') {
                 let mut root = global_root.clone();
                 root.push(stripped);
-                log::debug!("reading library {:?}", root);
+                tracing::debug!("reading library {:?}", root);
                 Ok(
                     std::fs::read_to_string(Path::new(&format!("{}.melo", root.to_string_lossy())))
                         .or_else(|_| {
@@ -62,10 +62,10 @@ impl Demodularizer {
     /// Return the demodularized version of some module ID.
     pub fn demod(&self, id: ModuleId, root: &Path) -> CtxResult<Ctx<RawProgram>> {
         if let Some(res) = self.cache.get(&id) {
-            log::debug!("demod {} HIT!", id);
+            tracing::debug!("demod {} HIT!", id);
             Ok(res.deref().clone())
         } else {
-            log::debug!("demod {} MISS!", id);
+            tracing::debug!("demod {} MISS!", id);
             // populate the cache
             let raw_string = (self.fallback)(id).err_ctx(None)?;
             let parsed = parse_program(&raw_string, id, root)?;
@@ -151,7 +151,7 @@ fn mangle(defs: List<Ctx<RawDefn>>, source: ModuleId) -> List<Ctx<RawDefn>> {
             }
         })
         .collect();
-    log::debug!("no_mangle for {}: {:?}", source, no_mangle);
+    tracing::debug!("no_mangle for {}: {:?}", source, no_mangle);
     defs.into_iter()
         .filter_map(|defn| {
             match defn.deref().clone() {

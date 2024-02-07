@@ -138,7 +138,7 @@ pub fn sort_defs(defs: List<Ctx<RawDefn>>) -> List<Ctx<RawDefn>> {
         visit(def.name(), &defs, &mut sorted, &mut visited);
     }
 
-    log::debug!(
+    tracing::debug!(
         "definitions sorted: {:?}",
         sorted.iter().map(|d| d.name()).collect::<Vec<_>>()
     );
@@ -154,12 +154,12 @@ fn visit(
 ) {
     if !visited.contains(&def) {
         visited.insert(def);
-        log::trace!("visiting {:?}", def);
+        tracing::trace!("visiting {:?}", def);
 
         let def = find_by_name(defs, def);
         if let Some(def) = def {
             for parent in def.parents() {
-                log::trace!("{:?} depends on {:?}", def.name(), parent);
+                tracing::trace!("{:?} depends on {:?}", def.name(), parent);
                 visit(parent, defs, sorted, visited);
             }
             sorted.push(def.clone());

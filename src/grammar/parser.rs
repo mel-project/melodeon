@@ -17,7 +17,7 @@ use super::{RawDefn, RawExpr, RawProgram, RawTypeBind, RawTypeExpr};
 
 /// Parse a string as an entire program.
 pub fn parse_program(input: &str, source: ModuleId, root: &Path) -> CtxResult<Ctx<RawProgram>> {
-    log::debug!("parsing {} chars at {}", input.len(), source);
+    tracing::debug!("parsing {} chars at {}", input.len(), source);
     let root_ctx = CtxLocation {
         source,
         start_offset: 0,
@@ -69,7 +69,7 @@ pub fn parse_program(input: &str, source: ModuleId, root: &Path) -> CtxResult<Ct
 }
 
 fn parse_definition(pair: Pair<Rule>, source: ModuleId, root: &Path) -> Ctx<RawDefn> {
-    log::trace!("defn rule {:?} on {:?}", pair.as_rule(), pair.as_str());
+    tracing::trace!("defn rule {:?} on {:?}", pair.as_rule(), pair.as_str());
     match pair.as_rule() {
         Rule::fun_def | Rule::fun_def_gen => {
             let ctx = p2ctx(&pair, source);
@@ -184,7 +184,7 @@ fn parse_fun_args(pair: Pair<Rule>, source: ModuleId) -> List<Ctx<RawTypeBind>> 
 }
 
 fn parse_type_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawTypeExpr> {
-    log::trace!("type_expr rule {:?} on {:?}", pair.as_rule(), pair.as_str());
+    tracing::trace!("type_expr rule {:?} on {:?}", pair.as_rule(), pair.as_str());
     let ctx = p2ctx(&pair, source);
     match pair.as_rule() {
         Rule::type_union => pair
@@ -235,7 +235,7 @@ fn parse_expr(pair: Pair<Rule>, source: ModuleId) -> Ctx<RawExpr> {
     let levels = std::iter::repeat(" ")
         .take(current_counter)
         .fold(String::from(""), |a, b| (a.tap_mut(|a| a.push_str(b))));
-    log::trace!(
+    tracing::trace!(
         "{}expr rule {:?} on {:?}",
         levels,
         pair.as_rule(),
@@ -521,10 +521,9 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use log::LevelFilter;
+
     #[test]
     fn test_parse() {
-        init_logs();
         eprintln!(
             "{:?}",
             parse_program(
@@ -538,13 +537,5 @@ mod tests {
             )
             .unwrap()
         );
-    }
-
-    fn init_logs() {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .format_timestamp(None)
-            .filter_level(LevelFilter::Trace)
-            .try_init();
     }
 }

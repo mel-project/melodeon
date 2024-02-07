@@ -4,7 +4,6 @@ use std::{path::Path, time::Instant};
 
 use argh::FromArgs;
 
-use log::LevelFilter;
 use melodeon::{
     codegen::codegen_program,
     context::{CtxResult, ModuleId},
@@ -12,6 +11,7 @@ use melodeon::{
     typesys::typecheck_program,
 };
 use tracing::Level;
+
 use tracing_subscriber::FmtSubscriber;
 
 #[derive(FromArgs)]
@@ -63,25 +63,22 @@ fn main_inner(args: Args, loader: &Demodularizer) -> CtxResult<()> {
         "{}",
         serde_yaml::to_string(&serde_json::to_value(&product).unwrap()).unwrap()
     );
-    println!("{:?}", product.eval());
+    eprintln!("{:?}", product.eval());
     let compiled = mil2::assemble(&mil2::compile_mil(product)?)?;
+    for compiled in compiled.iter() {
+        println!("{compiled}")
+    }
+
     let result = melvm::Covenant::from_ops(&compiled)
         .debug_execute(&[], 100000)
         .unwrap();
-    println!("{:?}", result);
+    eprintln!("{:?}", result);
     Ok(())
 }
 
 fn time_stage<T>(label: &str, action: impl FnOnce() -> T) -> T {
     let start = Instant::now();
     let res = action();
-    log::info!("[{}] took {:?}", label, start.elapsed());
+    tracing::info!("[{}] took {:?}", label, start.elapsed());
     res
-}
-
-fn init_logs() {
-    let _ = env_logger::builder()
-        .format_timestamp(None)
-        .filter_level(LevelFilter::Debug)
-        .try_init();
 }
