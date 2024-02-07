@@ -226,23 +226,38 @@ impl Type {
 
     /// Using the current type (which contains typevars of type TVar) as a template, as well as a different type where the "holes" formed by these typevars are filled, derive a mapping between the free typevars of [self] and types.
     pub fn unify_tvars(&self, other: &Type) -> Option<Map<Symbol, Type>> {
-        tracing::trace!("unify_tvars {:?} with {:?}", self, other);
+        tracing::debug!("unify_tvars {:?} with {:?}", self, other);
         // First, we find out exactly *where* in self do the typevars appear.
         let locations = self.tvar_locations();
-        tracing::trace!("found locations: {:?}", locations);
+        tracing::debug!("found locations: {:?}", locations);
         // Then, we index into other to find out what concrete types those tvars represent
         let res = locations
             .into_iter()
             .map(|(var, locations)| {
                 locations
                     .into_iter()
-                    .fold(Some(Type::Nothing), |accum, elem| {
-                        let accum = accum?;
-                        let ptr = other.clone();
-                        for _elem in elem {
-                            todo!()
+                    .fold(Some(Type::Nothing), |accum, location_path| {
+                        let accum = accum?; // If accum is None, return None
+                                            // We need to navigate through `other` using the indices in `location_path`
+                        let mut current_type = other;
+                        for index in location_path {
+                            current_type = match index {
+                                // Index is None, indicating a Vectorof type, we need to get the inner type
+                                None => match current_type {
+                                    Type::Vectorof(inner) => inner,
+                                    // If the current type isn't a Vectorof, then the location path isn't valid
+                                    _ => return None,
+                                },
+                                // Index is Some, indicating we should try to get the `idx`-th element of a Vector
+                                Some(idx) => match current_type {
+                                    Type::Vector(types) => types.get(idx)?, // Get the type at index `idx`
+                                    // If the current type isn't a Vector, then the location path isn't valid
+                                    _ => return None,
+                                },
+                            };
                         }
-                        Some(accum.smart_union(&ptr))
+                        // Now we have the type in `other` that corresponds to the type variable in `self`
+                        Some(accum.smart_union(current_type))
                     })
                     .map(|other_piece| (var, other_piece))
             })
@@ -268,6 +283,18 @@ impl Type {
             Type::Var(tvar) => Map::new().tap_mut(|map| {
                 map.insert(*tvar, [List::new()].into_iter().collect());
             }),
+            Type::Vectorof(t) => t
+                .tvar_locations()
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v.into_iter()
+                            .map(|v| v.tap_mut(|v| v.insert(0, None)))
+                            .collect(),
+                    )
+                })
+                .collect(),
             Type::Vector(vec) => {
                 let mut mapping = Map::new();
                 for (idx, v) in vec.iter().enumerate() {

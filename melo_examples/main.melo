@@ -4,8 +4,10 @@ def f(x: Nat, g: (Nat) -> Nat): Nat =
 def create_g(i: Nat): (Nat) -> Nat =
     (j: Nat) -> i + j
 
+def second<T>(i: [T..]): T = i[1]
+
 
 ---
 
 let x = [f(3, create_g(4))] ++ [5] in
-x is [Nat, Nat] + len(x)
+[second(x :: [Nat..])] ++ [second<T=Bytes>(["hello", "world"])]

@@ -104,7 +104,7 @@ fn codegen_expr(expr: &Expr) -> Mil {
             args.iter().map(codegen_expr).collect(),
         ),
         ExprInner::LitNum(num) => Mil::Number(*num),
-        ExprInner::LitBytes(_) => todo!(),
+        ExprInner::LitBytes(b) => Mil::Bytes(b.clone()),
         ExprInner::LitBVec(_) => todo!(),
         ExprInner::LitVec(vec) => Mil::List(vec.iter().map(codegen_expr).collect()),
         ExprInner::Var(x) => Mil::Var(x.to_smolstr()),
