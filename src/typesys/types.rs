@@ -31,14 +31,14 @@ impl Debug for Type {
             Type::Nothing => std::fmt::Display::fmt("Nothing", f),
             Type::Any => std::fmt::Display::fmt("Any", f),
             Type::Var(t) => t.fmt(f),
-            Type::Nat => "Nat".fmt(f),
+            Type::Nat => std::fmt::Display::fmt("Nat", f),
             Type::Vector(vec) => vec.fmt(f),
 
             Type::Struct(s, _) => std::fmt::Display::fmt(&format!("{}", s), f),
             Type::Union(t, u) => std::fmt::Display::fmt(&format!("{:?} | {:?}", t, u), f),
-            Type::Vectorof(t) => std::fmt::Display::fmt(&format!("[{:?};]", t), f),
+            Type::Vectorof(t) => std::fmt::Display::fmt(&format!("[{:?}..]", t), f),
 
-            Type::Bytes => std::fmt::Display::fmt("%[]", f),
+            Type::Bytes => std::fmt::Display::fmt("Bytes", f),
 
             Type::Lambda {
                 free_vars: _,
